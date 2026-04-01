@@ -228,6 +228,11 @@ const ShopDashboard = () => {
           </div>
         </header>
 
+        {/* Diagnostic Peer ID (Hidden but visible for us now) */}
+        <div className="mb-4 text-[10px] font-mono text-muted-foreground/40 bg-secondary/20 px-3 py-1 rounded-md inline-block">
+          Network Node ID: vprint-shop-{shopId?.toLowerCase()}
+        </div>
+
         <div className="space-y-6">
           <AnimatePresence mode="popLayout">
             {jobs.length === 0 && (

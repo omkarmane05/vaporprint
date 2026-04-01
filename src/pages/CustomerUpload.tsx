@@ -144,6 +144,9 @@ const CustomerUpload = () => {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md space-y-10"
       >
+        <div className="absolute top-4 right-4 text-[10px] font-mono text-muted-foreground/30">
+          Target Node: vprint-shop-{shopId?.toLowerCase()}
+        </div>
         <header className="text-center">
           <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-6 mx-auto pastel-lavender border border-primary/20">
             <Printer className="text-primary" size={28} />
