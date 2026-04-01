@@ -34,13 +34,35 @@ const CustomerUpload = () => {
     const verificationCode = generateCode();
     const jobId = generateId();
 
-    const peer = new Peer();
+    const peer = new Peer({
+      config: {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+        ],
+      },
+    });
 
     peer.on("open", (peerId) => {
       const shopPeerId = `VPRINT-SHOP-${shopId}`;
-      const conn = peer.connect(shopPeerId);
+      console.log("[P2P] Connecting to shop:", shopPeerId);
+      
+      const conn = peer.connect(shopPeerId, {
+        reliable: true
+      });
+
+      // Timeout if shop is truly offline
+      const connectTimeout = setTimeout(() => {
+        if (!conn.open) {
+          setLoading(false);
+          setStatus(null);
+          alert("Shop is unreachable. Make sure the Shop Dashboard is open!");
+        }
+      }, 8000);
 
       conn.on("open", async () => {
+        clearTimeout(connectTimeout);
         setStatus("Handshaking...");
         
         try {

@@ -22,8 +22,16 @@ const ShopDashboard = () => {
   useEffect(() => {
     if (!shopId) return;
 
-    // Initialize Shop Peer
-    const peer = new Peer(`VPRINT-SHOP-${shopId}`);
+    // Initialize Shop Peer with solid STUN servers
+    const peer = new Peer(`VPRINT-SHOP-${shopId}`, {
+      config: {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+        ],
+      },
+    });
 
     peer.on("connection", (conn) => {
       conn.on("data", (data: any) => {
