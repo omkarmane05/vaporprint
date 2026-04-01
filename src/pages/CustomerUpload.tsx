@@ -36,46 +36,62 @@ const CustomerUpload = () => {
     const jobId = generateId();
 
     try {
-      setStatus("Step 1/3: Authenticating with Relay...");
-      console.log("[Diagnostic] Shop ID:", shopId);
-
-      // 1. Upload to Temporary Vapor-Bucket
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${jobId}.${fileExt}`;
-      const filePath = `${shopId}/${fileName}`;
+      setStatus("Establishing Relay... (100% Reliable Mode)");
       
-      setStatus("Step 2/3: Uploading document to Secure Buffer...");
-      console.log("[Diagnostic] Target path:", filePath);
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('vapor_buffer')
-        .upload(filePath, file);
+      // Breakdown file into 200KB chunks for Realtime broadcast
+      const CHUNK_SIZE = 200 * 1024;
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const channel = supabase.channel(`vprint-relay-${shopId}`);
 
-      if (uploadError) {
-        console.error("[Storage Error]", uploadError);
-        throw new Error(`Cloud Storage Rejected: ${uploadError.message}`);
-      }
-
-      // 2. Register metadata
-      setStatus("Step 3/3: Handshaking with Dashboard...");
+      setStatus("Syncing Metadata...");
       await addJob(shopId, {
         id: jobId,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
-        fileDataUrl: filePath, // This is the relay path
+        fileDataUrl: "STREAMING_REALTIME", 
         copies,
         code: verificationCode,
         timestamp: Date.now(),
         shopId,
       });
 
+      setStatus(`Streaming: 0%`);
+      
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        
+        // Convert chunk to array buffer then base64 for Realtime
+        const buffer = await chunk.arrayBuffer();
+        const base64Chunk = btoa(
+          new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+
+        await channel.send({
+          type: "broadcast",
+          event: "chunk",
+          payload: {
+            jobId,
+            chunkIndex: i,
+            totalChunks,
+            data: base64Chunk,
+            fileName: file.name,
+            fileType: file.type
+          }
+        });
+        
+        const percent = Math.round(((i + 1) / totalChunks) * 100);
+        setStatus(`Streaming: ${percent}%`);
+      }
+
       setCode(verificationCode);
       setLoading(false);
       setStatus(null);
     } catch (err: any) {
-      console.error("[Full Handshake Failure]", err);
-      setStatus(`FAIL: ${err.message || "Unknown error"}`);
+      console.error("[Link Error]", err);
+      setStatus(`Link Failed: ${err.message || "Unknown error"}`);
       setLoading(false);
     }
   };

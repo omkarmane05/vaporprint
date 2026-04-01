@@ -56,6 +56,45 @@ const ShopDashboard = () => {
       if (err.type === "unavailable-id") toast.error("Shop ID conflict. Please refresh.");
     });
 
+    // Relay reassembly buffer
+    const chunkBuffer = new Map<string, string[]>();
+
+    // Subscribe to Realtime Relay Channel
+    const relayChannel = supabase.channel(`vprint-relay-${shopId}`)
+      .on("broadcast", { event: "chunk" }, (payload: any) => {
+        const { jobId, chunkIndex, totalChunks, data, fileName, fileType } = payload.payload;
+        
+        if (!chunkBuffer.has(jobId)) {
+          chunkBuffer.set(jobId, new Array(totalChunks).fill(null));
+        }
+        
+        const chunks = chunkBuffer.get(jobId)!;
+        chunks[chunkIndex] = data;
+
+        // If all chunks arrived, reassemble
+        if (chunks.every(c => c !== null)) {
+          console.log("[Relay] Reassembling file:", fileName);
+          // Convert base64 chunks back to Blob
+          const byteArrays = chunks.map(base64 => {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            return new Uint8Array(byteNumbers);
+          });
+          
+          receivedFiles.current[jobId] = {
+            blob: new Blob(byteArrays, { type: fileType }),
+            fileName,
+            fileType,
+          };
+          toast.success(`Received via Relay: ${fileName}`);
+          chunkBuffer.delete(jobId);
+        }
+      })
+      .subscribe();
+
     peer.on("connection", (conn) => {
       conn.on("data", (data: any) => {
         if (data.type === "FILE_TRANSFER") {
@@ -73,6 +112,7 @@ const ShopDashboard = () => {
 
     return () => {
       peer.destroy();
+      supabase.removeChannel(relayChannel);
     };
   }, [shopId]);
 
