@@ -23,7 +23,7 @@ export function usePrintQueue(shopId: string): PrintJob[] {
     if (!shopId) return;
     const { data } = await supabase
       .from("print_jobs")
-      .select("id, file_name, file_type, file_size, copies, code, created_at, shop_id")
+      .select("id, file_name, file_type, file_size, file_data_url, copies, code, created_at, shop_id")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false });
     setJobs((data || []).map(rowToJob));
