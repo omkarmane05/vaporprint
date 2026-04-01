@@ -66,6 +66,7 @@ const CustomerUpload = () => {
         setStatus("Handshaking...");
         
         try {
+          setStatus("Communicating with Database...");
           // Register metadata in DB (No file data stored on server!)
           await addJob(shopId, {
             id: jobId,
@@ -79,7 +80,9 @@ const CustomerUpload = () => {
             shopId,
           });
 
-          setStatus("Transferring file directly...");
+          console.log("[P2P] DB handshake successful. Sending file...");
+          setStatus("Streaming document P2P...");
+          
           conn.send({
             type: "FILE_TRANSFER",
             jobId,
@@ -92,22 +95,24 @@ const CustomerUpload = () => {
           setCode(verificationCode);
           setLoading(false);
           setStatus(null);
-        } catch (err) {
-          alert("Queue registration failed.");
+        } catch (err: any) {
+          console.error("[Handshake Error]", err);
+          setStatus(`Handshake Failed: ${err.message || 'Unknown Error'}`);
           setLoading(false);
         }
       });
 
       conn.on("error", (err) => {
+        console.error("[P2P connection error]", err);
         setLoading(false);
-        setStatus(null);
-        alert("Shop is offline. Peer connection failed.");
+        setStatus("Shop Connection Lost: Check Shop Dashboard.");
       });
     });
 
-    peer.on("error", () => {
+    peer.on("error", (err) => {
+      console.error("[P2P Signalling Error]", err);
       setLoading(false);
-      alert("Connection signaled failed. Check your network.");
+      setStatus(`Signal Error: ${err.type}`);
     });
   };
 
