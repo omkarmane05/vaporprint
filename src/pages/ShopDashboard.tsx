@@ -244,9 +244,33 @@ const ShopDashboard = () => {
           </p>
           <button 
             onClick={() => window.location.reload()}
-            className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all"
+            className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all mb-3"
           >
             REFRESH DATABASE
+          </button>
+
+          <button 
+            onClick={async () => {
+              const testId = crypto.randomUUID();
+              try {
+                await supabase.from("print_jobs").insert({
+                  id: testId,
+                  shop_id: shopId,
+                  file_name: "DEBUG_TEST.pdf",
+                  file_type: "application/pdf",
+                  file_size: 1024,
+                  file_data_url: "DEBUG",
+                  copies: 1,
+                  code: "999999"
+                });
+                toast.success("Debug row inserted!");
+              } catch (e) {
+                toast.error("DB INSERT FAILED: Check Keys!");
+              }
+            }}
+            className="w-full py-3 bg-primary/10 rounded-xl text-[10px] font-bold tracking-widest text-primary hover:bg-primary/20 transition-all border border-primary/20"
+          >
+            DEBUG: TEST CONNECTION
           </button>
         </div>
       </aside>
