@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2 } from "lucide-react";
 import { addJob, generateId, generateCode } from "@/lib/printQueue";
+import { supabase } from "@/integrations/supabase/client";
 import { Peer } from "peerjs";
 
 const CustomerUpload = () => {
@@ -34,96 +35,44 @@ const CustomerUpload = () => {
     const verificationCode = generateCode();
     const jobId = generateId();
 
-    const peer = new Peer({
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { 
-            urls: "turn:openrelay.metered.ca:80", 
-            username: "openrelay", 
-            credential: "openrelay" 
-          },
-          { 
-            urls: "turn:openrelay.metered.ca:443", 
-            username: "openrelay", 
-            credential: "openrelay" 
-          },
-        ],
-      },
-    });
-
-    peer.on("open", (peerId) => {
-      const shopPeerId = `vprint-shop-${shopId?.toLowerCase()}`;
-      console.log("[P2P] Connecting to shop:", shopPeerId);
+    try {
+      setStatus("Establishing Secure Channel...");
       
-      const conn = peer.connect(shopPeerId, {
-        reliable: true
+      // 1. Upload to Temporary Vapor-Bucket
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${jobId}.${fileExt}`;
+      const filePath = `${shopId}/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('vapor_buffer')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw new Error("Relay Station blocked. Please refresh.");
+      }
+
+      // 2. Register metadata
+      setStatus("Vaporizing file path...");
+      await addJob(shopId, {
+        id: jobId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        fileDataUrl: filePath, // This is the relay path
+        copies,
+        code: verificationCode,
+        timestamp: Date.now(),
+        shopId,
       });
 
-      // Timeout if shop is truly offline
-      const connectTimeout = setTimeout(() => {
-        if (!conn.open) {
-          setLoading(false);
-          setStatus(null);
-          alert("Shop is unreachable. Make sure the Shop Dashboard is open!");
-        }
-      }, 8000);
-
-      conn.on("open", async () => {
-        clearTimeout(connectTimeout);
-        setStatus("Handshaking...");
-        
-        try {
-          setStatus("Communicating with Database...");
-          // Register metadata in DB (No file data stored on server!)
-          await addJob(shopId, {
-            id: jobId,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            fileDataUrl: "P2P_TRANSFER", 
-            copies,
-            code: verificationCode,
-            timestamp: Date.now(),
-            shopId,
-          });
-
-          console.log("[P2P] DB handshake successful. Sending file...");
-          setStatus("Streaming document P2P...");
-          
-          conn.send({
-            type: "FILE_TRANSFER",
-            jobId,
-            fileName: file.name,
-            fileType: file.type,
-            fileData: file, // Binary File sent over DataChannel
-            verificationCode,
-          });
-
-          setCode(verificationCode);
-          setLoading(false);
-          setStatus(null);
-        } catch (err: any) {
-          console.error("[Handshake Error]", err);
-          setStatus(`Handshake Failed: ${err.message || 'Unknown Error'}`);
-          setLoading(false);
-        }
-      });
-
-      conn.on("error", (err) => {
-        console.error("[P2P connection error]", err);
-        setLoading(false);
-        setStatus("Shop Connection Lost: Check Shop Dashboard.");
-      });
-    });
-
-    peer.on("error", (err) => {
-      console.error("[P2P Signalling Error]", err);
+      setCode(verificationCode);
       setLoading(false);
-      setStatus(`Signal Error: ${err.type}`);
-    });
+      setStatus(null);
+    } catch (err: any) {
+      console.error("[Link Error]", err);
+      setStatus(`Link Failed: ${err.message || "Unknown error"}`);
+      setLoading(false);
+    }
   };
 
   if (code) {

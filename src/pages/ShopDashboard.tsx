@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { useEffect, useRef } from "react";
 import { Peer } from "peerjs";
+import { supabase } from "@/integrations/supabase/client";
 
 const ShopDashboard = () => {
   const { shopId } = useParams<{ shopId: string }>();
@@ -98,14 +99,37 @@ const ShopDashboard = () => {
     }
 
     const jobData = receivedFiles.current[jobId];
-    if (!jobData) {
-      toast.error("File data lost or not received yet via P2P.");
-      return;
+    let blob: Blob;
+    let fileName = job.fileName;
+    let fileType = job.fileType;
+
+    if (jobData) {
+      // Use P2P data if available (faster)
+      blob = jobData.blob;
+      fileName = jobData.fileName;
+      fileType = jobData.fileType;
+    } else {
+      // Fallback to Cloud-Relay (Storage)
+      toast.info("Retrieving from secure relay...");
+      const { data: downloadData, error: downloadError } = await supabase.storage
+        .from('vapor_buffer')
+        .download(job.fileDataUrl);
+
+      if (downloadError) {
+        toast.error("Relay file expired or missing.");
+        return;
+      }
+      blob = downloadData;
+
+      // Vaporize from Cloud Relay immediately after download
+      await supabase.storage
+        .from('vapor_buffer')
+        .remove([job.fileDataUrl]);
     }
 
-    const isPdf = jobData.fileType === "application/pdf";
-    const isImage = jobData.fileType.startsWith("image/");
-    const blobUrl = URL.createObjectURL(jobData.blob);
+    const isPdf = fileType === "application/pdf";
+    const isImage = fileType.startsWith("image/");
+    const blobUrl = URL.createObjectURL(blob);
 
     if (isPdf) {
       // For PDFs: utilize <embed> with Blob URL
