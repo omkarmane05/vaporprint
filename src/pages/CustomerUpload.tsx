@@ -45,7 +45,7 @@ const CustomerUpload = () => {
     });
 
     peer.on("open", (peerId) => {
-      const shopPeerId = `VPRINT-SHOP-${shopId}`;
+      const shopPeerId = `vprint-shop-${shopId?.toLowerCase()}`;
       console.log("[P2P] Connecting to shop:", shopPeerId);
       
       const conn = peer.connect(shopPeerId, {

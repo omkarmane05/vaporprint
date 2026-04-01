@@ -22,8 +22,9 @@ const ShopDashboard = () => {
   useEffect(() => {
     if (!shopId) return;
 
-    // Initialize Shop Peer with solid STUN servers
-    const peer = new Peer(`VPRINT-SHOP-${shopId}`, {
+    // Initialize Shop Peer with solid STUN servers and lowercase ID
+    const peerId = `vprint-shop-${shopId?.toLowerCase()}`;
+    const peer = new Peer(peerId, {
       config: {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -31,6 +32,17 @@ const ShopDashboard = () => {
           { urls: "stun:stun2.l.google.com:19302" },
         ],
       },
+    });
+
+    peer.on("open", () => {
+      console.log("[P2P] Shop active on ID:", peerId);
+      toast.success("Ready to receive prints (P2P Active)");
+    });
+
+    peer.on("error", (err) => {
+      console.error("[P2P Server Error]", err);
+      // Try to re-init if the ID was taken or server was slow
+      if (err.type === "unavailable-id") toast.error("Shop ID conflict. Please refresh.");
     });
 
     peer.on("connection", (conn) => {
