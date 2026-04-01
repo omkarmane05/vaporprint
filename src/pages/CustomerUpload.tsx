@@ -36,23 +36,28 @@ const CustomerUpload = () => {
     const jobId = generateId();
 
     try {
-      setStatus("Establishing Secure Channel...");
-      
+      setStatus("Step 1/3: Authenticating with Relay...");
+      console.log("[Diagnostic] Shop ID:", shopId);
+
       // 1. Upload to Temporary Vapor-Bucket
       const fileExt = file.name.split('.').pop();
       const fileName = `${jobId}.${fileExt}`;
       const filePath = `${shopId}/${fileName}`;
       
-      const { error: uploadError } = await supabase.storage
+      setStatus("Step 2/3: Uploading document to Secure Buffer...");
+      console.log("[Diagnostic] Target path:", filePath);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('vapor_buffer')
         .upload(filePath, file);
 
       if (uploadError) {
-        throw new Error("Relay Station blocked. Please refresh.");
+        console.error("[Storage Error]", uploadError);
+        throw new Error(`Cloud Storage Rejected: ${uploadError.message}`);
       }
 
       // 2. Register metadata
-      setStatus("Vaporizing file path...");
+      setStatus("Step 3/3: Handshaking with Dashboard...");
       await addJob(shopId, {
         id: jobId,
         fileName: file.name,
@@ -69,8 +74,8 @@ const CustomerUpload = () => {
       setLoading(false);
       setStatus(null);
     } catch (err: any) {
-      console.error("[Link Error]", err);
-      setStatus(`Link Failed: ${err.message || "Unknown error"}`);
+      console.error("[Full Handshake Failure]", err);
+      setStatus(`FAIL: ${err.message || "Unknown error"}`);
       setLoading(false);
     }
   };
