@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 25% 98%;
+    --foreground: 230 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 230 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 25% 15%;
+
+    --primary: 262 80% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 230 20% 95%;
+    --secondary-foreground: 230 15% 40%;
+
+    --muted: 230 20% 95%;
+    --muted-foreground: 230 10% 45%;
+
+    --accent: 200 80% 90%;
+    --accent-foreground: 230 25% 20%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 60% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 230 20% 90%;
+    --input: 230 20% 90%;
+    --ring: 262 80% 65%;
+
+    --radius: 1.25rem;
+
+    --font-sans: 'Outfit', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 230 15% 40%;
+    --sidebar-primary: 262 80% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 230 20% 94%;
+    --sidebar-accent-foreground: 230 25% 15%;
+    --sidebar-border: 230 20% 90%;
+    --sidebar-ring: 262 80% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+
+  code, .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/60 border border-white/40 rounded-[2rem] shadow-xl shadow-black/5 backdrop-blur-xl transition-all duration-300;
+  }
+
+  .glow-pastel {
+    box-shadow: 0 20px 40px -15px hsl(262 80% 65% / 0.15), 0 10px 20px -10px hsl(200 80% 90% / 0.2);
+  }
+
+  .text-gradient-pastel {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-[hsl(262,80%,65%)] via-[hsl(200,80%,65%)] to-[hsl(180,70%,65%)];
+  }
+  
+  .pastel-mint { background-color: hsl(160 80% 92%); }
+  .pastel-lavender { background-color: hsl(262 80% 92%); }
+  .pastel-sky { background-color: hsl(200 80% 92%); }
+}
