@@ -43,7 +43,8 @@ export function usePrintQueue(shopId: string): PrintJob[] {
           table: "print_jobs",
           filter: `shop_id=eq.${shopId}`,
         },
-        () => {
+        (payload) => {
+          console.log("[Realtime Alert]", payload);
           fetchJobs();
         }
       )

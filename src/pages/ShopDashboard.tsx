@@ -236,9 +236,18 @@ const ShopDashboard = () => {
             <div className="w-2.5 h-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(34,197,94,0.4)]" />
             SECURE MEMORY BUFFER
           </div>
-          <p className="text-xs text-muted-foreground/80 leading-relaxed">
+          <div className="flex items-center gap-3 text-primary text-[10px] font-bold mb-6">
+             REALTIME SYNC: ACTIVE
+          </div>
+          <p className="text-xs text-muted-foreground/80 leading-relaxed mb-6">
             All documents stay in volatile memory and are purged automatically after 10 minutes.
           </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all"
+          >
+            REFRESH DATABASE
+          </button>
         </div>
       </aside>
 
