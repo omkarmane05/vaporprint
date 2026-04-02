@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Printer, Shield, Clock, Zap } from "lucide-react";
@@ -12,8 +11,11 @@ const features = [
 
 const Home = () => {
   const navigate = useNavigate();
-  // Home page now acts as a high-end enterprise landing page
-  const [isHovered, setIsHovered] = useState(false);
+
+  const createShop = () => {
+    const shopId = generateShopId();
+    navigate(`/dashboard/${shopId}`);
+  };
 
   return (
     <div className="min-h-svh flex flex-col items-center justify-center p-6">
@@ -34,22 +36,14 @@ const Home = () => {
           Experience privacy-first document transfer. Files exist only in-flight and vanish the moment they're printed.
         </p>
 
-        <div className="flex flex-col items-center gap-6">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate("/login")}
-            className="bg-primary text-primary-foreground px-12 py-6 rounded-2xl font-extrabold text-xl transition-all shadow-2xl shadow-primary/30 glow-pastel flex items-center gap-4 group"
-          >
-            ACCESS PARTNER HUB <Zap className="group-hover:text-yellow-400 transition-colors" size={24} />
-          </motion.button>
-          
-          <p className="text-[10px] uppercase font-bold tracking-[.4em] text-muted-foreground/30">
-            ENCRYPTED NETWORK • INVITE ONLY
-          </p>
-        </div>
+        <button
+          onClick={createShop}
+          className="bg-primary text-primary-foreground px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel"
+        >
+          Initialize Shop
+        </button>
 
-        <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8 mb-16">
+        <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8">
           {features.map((f, i) => (
             <motion.div
               key={f.title}
@@ -66,20 +60,6 @@ const Home = () => {
             </motion.div>
           ))}
         </div>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="pt-10 border-t border-border/40"
-        >
-          <button
-            onClick={() => navigate("/login")}
-            className="flex items-center gap-2 mx-auto text-[10px] font-bold tracking-[.3em] uppercase text-muted-foreground hover:text-primary transition-all group"
-          >
-            <Shield size={14} className="group-hover:rotate-12 transition-transform" /> COMMAND CENTER ACCESS
-          </button>
-        </motion.div>
       </motion.div>
     </div>
   );
