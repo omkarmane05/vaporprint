@@ -16,6 +16,8 @@ const ShopDashboard = () => {
   const jobs = usePrintQueue(shopId || "");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [inputCode, setInputCode] = useState("");
+  const [masterOtp, setMasterOtp] = useState("");
+  const masterOtpRef = useRef<HTMLInputElement>(null);
   
   // Local storage for P2P received files (not on any server!)
   const receivedFiles = useRef<Record<string, { blob: Blob; fileName: string; fileType: string }>>({});
@@ -120,8 +122,9 @@ const ShopDashboard = () => {
 
   const uploadUrl = `${window.location.origin}/upload/${shopId}`;
 
-  const handlePrint = async (jobId: string) => {
-    const job = await verifyAndPrint(shopId, jobId, inputCode);
+  const handlePrint = async (jobId: string, directCode?: string) => {
+    const activeCode = directCode || inputCode;
+    const job = await verifyAndPrint(shopId, jobId, activeCode);
     if (!job) {
       toast.error("Invalid verification code.");
       return;
@@ -232,6 +235,27 @@ const ShopDashboard = () => {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
   };
 
+  const handleMasterRelease = async (code: string) => {
+    if (code.length !== 6) return;
+
+    // Find the job with this code in our current queue
+    const matchingJob = jobs.find(j => j.code === code);
+    
+    if (!matchingJob) {
+      toast.error("No document found with that code in the queue.");
+      setMasterOtp("");
+      return;
+    }
+
+    toast.info(`Found: ${matchingJob.fileName}. Releasing...`);
+    
+    // Use the existing handlePrint logic with direct code passing
+    await handlePrint(matchingJob.id, code);
+    
+    setMasterOtp("");
+    masterOtpRef.current?.focus();
+  };
+
   const copyLink = () => {
     navigator.clipboard.writeText(uploadUrl);
     toast.success("Upload link copied!");
@@ -335,6 +359,42 @@ const ShopDashboard = () => {
           </div>
         </header>
 
+        {/* Master OTP Search & Release Bar */}
+        <section className="mb-12">
+          <div className="glass-panel p-1 border-primary/20 shadow-2xl shadow-primary/5 group transition-all hover:scale-[1.01]">
+            <div className="flex flex-col sm:flex-row items-stretch gap-1">
+              <div className="flex-1 flex items-center px-6 py-4 gap-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0 group-hover:rotate-12 transition-transform">
+                  <ShieldCheck size={20} />
+                </div>
+                <input
+                  ref={masterOtpRef}
+                  type="text"
+                  placeholder="ENTER 6-DIGIT CUSTOMER CODE FOR INSTANT RELEASE..."
+                  maxLength={6}
+                  value={masterOtp}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setMasterOtp(val);
+                    if (val.length === 6) {
+                      // Attempt instant release when 6 digits are reached
+                      handleMasterRelease(val);
+                    }
+                  }}
+                  className="w-full bg-transparent border-none text-lg font-bold tracking-[0.2em] placeholder:tracking-normal placeholder:font-medium placeholder:text-muted-foreground/40 outline-none"
+                />
+              </div>
+              <button 
+                onClick={() => handleMasterRelease(masterOtp)}
+                disabled={masterOtp.length !== 6}
+                className="bg-primary text-primary-foreground px-8 py-3 rounded-2xl font-bold transition-all hover:brightness-110 active:scale-95 disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3"
+              >
+                RELEASE NOW
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Diagnostic Peer ID (Hidden but visible for us now) */}
         <div className="mb-4 text-[10px] font-mono text-muted-foreground/40 bg-secondary/20 px-3 py-1 rounded-md inline-block">
           Network Node ID: vprint-shop-{shopId?.toLowerCase()}
@@ -389,10 +449,10 @@ const ShopDashboard = () => {
                         maxLength={6}
                         value={inputCode}
                         onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))}
-                        onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id)}
+                        onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)}
                       />
                       <button
-                        onClick={() => handlePrint(job.id)}
+                        onClick={() => handlePrint(job.id, inputCode)}
                         className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-primary/20"
                       >
                         VERIFY
