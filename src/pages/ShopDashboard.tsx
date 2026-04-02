@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2 } from "lucide-react";
@@ -12,6 +12,7 @@ import { Peer } from "peerjs";
 import { supabase } from "@/integrations/supabase/client";
 
 const ShopDashboard = () => {
+  const navigate = useNavigate();
   const { shopId } = useParams<{ shopId: string }>();
   const [searchParams] = useSearchParams();
   const shopName = searchParams.get("name") || "Untitled Shop";
@@ -27,7 +28,34 @@ const ShopDashboard = () => {
   const receivedFiles = useRef<Record<string, { blob: Blob; fileName: string; fileType: string }>>({});
 
   useEffect(() => {
-    if (!shopId) return;
+    const checkAccess = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast.error("Authentication required.");
+        navigate("/login");
+        return;
+      }
+
+      // Verify ownership of this shop
+      const { data: shopData, error } = await supabase
+        .from("shops")
+        .select("owner_id")
+        .eq("slug", shopId)
+        .single();
+        
+      if (error || shopData?.owner_id !== user.id) {
+        // Special case for global admin
+        const isAdmin = user.email === "admin@vaporprint.live"; // Replace with your admin email
+        if (!isAdmin) {
+          toast.error("Unauthorized access.");
+          navigate("/");
+          return;
+        }
+      }
+    };
+
+    checkAccess();
 
     // Initialize Shop Peer with solid STUN servers and lowercase ID
     const peerId = `vprint-shop-${shopId?.toLowerCase()}`;
