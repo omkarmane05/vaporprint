@@ -50,30 +50,6 @@ export type Database = {
         }
         Relationships: []
       }
-      shops: {
-        Row: {
-          id: string
-          owner_email: string
-          name: string
-          location: string
-          created_at: string
-        }
-        Insert: {
-          id: string
-          owner_email: string
-          name: string
-          location: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          owner_email?: string
-          name?: string
-          location?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
