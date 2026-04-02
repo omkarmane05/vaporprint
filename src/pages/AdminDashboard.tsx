@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Users, Shield, MapPin, Mail, Loader2, Signal, Trash2 } from "lucide-react";
+import { Plus, Users, Shield, MapPin, Mail, Loader2, Signal, Trash2, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -37,6 +37,12 @@ const AdminDashboard = () => {
       toast.success("Station vaporized successfully.");
       fetchShops();
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+    toast.success("Safely logged out.");
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -95,12 +101,21 @@ const AdminDashboard = () => {
           </p>
         </div>
         
-        <button
-          onClick={() => setIsInviteOpen(true)}
-          className="bg-primary text-primary-foreground h-14 px-8 rounded-2xl font-bold flex items-center gap-3 transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel"
-        >
-          <Plus size={20} /> ONBOARD NEW BRANCH
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleLogout}
+            className="h-14 px-6 rounded-2xl font-bold flex items-center gap-3 transition-all hover:bg-destructive/10 hover:text-destructive text-muted-foreground border border-border/50"
+          >
+            <LogOut size={20} />
+          </button>
+          
+          <button
+            onClick={() => setIsInviteOpen(true)}
+            className="bg-primary text-primary-foreground h-14 px-8 rounded-2xl font-bold flex items-center gap-3 transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel"
+          >
+            <Plus size={20} /> ONBOARD NEW BRANCH
+          </button>
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto space-y-6">
