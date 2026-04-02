@@ -12,22 +12,8 @@ const features = [
 
 const Home = () => {
   const navigate = useNavigate();
-  const [shopName, setShopName] = useState("");
-  const [location, setLocation] = useState("");
-  const [isInitializing, setIsInitializing] = useState(false);
-
-  const createShop = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!shopName || !location) return;
-    
-    setIsInitializing(true);
-    // Create a permanent-style slug from Name + Location
-    const slug = `${shopName}-${location}`.toLowerCase().replace(/[^a-z0-9]/g, "-").substring(0, 32);
-    const uniqueId = `${slug}-${Math.random().toString(36).substring(2, 6)}`;
-    
-    // Store metadata temporarily? (Or just pass via URL for now)
-    navigate(`/dashboard/${uniqueId}?name=${encodeURIComponent(shopName)}&loc=${encodeURIComponent(location)}`);
-  };
+  // Home page now acts as a high-end enterprise landing page
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div className="min-h-svh flex flex-col items-center justify-center p-6">
@@ -48,34 +34,20 @@ const Home = () => {
           Experience privacy-first document transfer. Files exist only in-flight and vanish the moment they're printed.
         </p>
 
-        <form onSubmit={createShop} className="max-w-sm mx-auto space-y-4">
-          <div className="space-y-2">
-            <input
-              type="text"
-              placeholder="Shop Name (e.g. Central Copy)"
-              value={shopName}
-              onChange={(e) => setShopName(e.target.value)}
-              className="w-full bg-secondary/50 border border-border rounded-xl px-5 h-14 font-medium outline-none focus:ring-4 ring-primary/5 focus:border-primary/40 transition-all text-center"
-              required
-            />
-            <input
-              type="text"
-              placeholder="Location (e.g. Main Street)"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="w-full bg-secondary/50 border border-border rounded-xl px-5 h-14 font-medium outline-none focus:ring-4 ring-primary/5 focus:border-primary/40 transition-all text-center"
-              required
-            />
-          </div>
-          
-          <button
-            type="submit"
-            disabled={!shopName || !location || isInitializing}
-            className="w-full bg-primary text-primary-foreground h-16 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel disabled:opacity-50"
+        <div className="flex flex-col items-center gap-6">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => navigate("/login")}
+            className="bg-primary text-primary-foreground px-12 py-6 rounded-2xl font-extrabold text-xl transition-all shadow-2xl shadow-primary/30 glow-pastel flex items-center gap-4 group"
           >
-            {isInitializing ? "Initializing Hub..." : "Initialize New Branch"}
-          </button>
-        </form>
+            ACCESS PARTNER HUB <Zap className="group-hover:text-yellow-400 transition-colors" size={24} />
+          </motion.button>
+          
+          <p className="text-[10px] uppercase font-bold tracking-[.4em] text-muted-foreground/30">
+            ENCRYPTED NETWORK • INVITE ONLY
+          </p>
+        </div>
 
         <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8 mb-16">
           {features.map((f, i) => (
