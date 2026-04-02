@@ -44,10 +44,11 @@ const AdminDashboard = () => {
     setIsSubmitting(true);
     
     try {
-      // 1. Create the permanent ID slug from Name + Location
+      // 1. Create the permanent ID slug
       const slug = `${newShopName}-${location}`.toLowerCase().replace(/[^a-z0-9]/g, "-").substring(0, 32) + "-" + Math.random().toString(36).substring(2, 6);
-      
-      // 2. Create the Shop entry
+      const activationLink = `${window.location.origin}/setup-password?claim=${slug}`;
+
+      // 2. Create the Shop entry in the Database
       const { error: shopError } = await supabase.from("shops").insert({
         name: newShopName,
         location: location,
@@ -56,21 +57,20 @@ const AdminDashboard = () => {
 
       if (shopError) throw shopError;
 
-      // 3. TRIGGER AUTOMATED EMAIL (Edge Function Call)
-      // This will call a Supabase function to send the professional email
-      const { error: emailError } = await supabase.functions.invoke('onboard-owner', {
-        body: { 
-          email: ownerEmail,
-          shopName: newShopName,
-          activationLink: `${window.location.origin}/setup-password?claim=${slug}`
-        }
-      });
+      // 3. Draft the Professional Invitation Email
+      const subject = encodeURIComponent(`Action Required: Activate your ${newShopName} Station`);
+      const body = encodeURIComponent(
+        `Hello,\n\nYou have been invited to manage a printing station at ${newShopName} (${location}).\n\n` +
+        `To securely activate your station and set your manager password, please click the link below:\n\n` +
+        `${activationLink}\n\n` +
+        `Welcome to the VaporPrint network.\n\n` +
+        `Regards,\nNetwork Administration`
+      );
 
-      if (emailError) {
-        console.warn("Email automation skipped (Edge Function not deployed), use Copy Invite link instead.");
-      }
+      // Open Native Email App
+      window.location.href = `mailto:${ownerEmail}?subject=${subject}&body=${body}`;
 
-      toast.success(`Station Initialized: ${newShopName}`);
+      toast.success(`Station Initialized. Please send the drafted email.`);
       setIsInviteOpen(false);
       fetchShops();
     } catch (err: any) {
