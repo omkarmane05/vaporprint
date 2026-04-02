@@ -32,33 +32,26 @@ const AdminDashboard = () => {
     setIsSubmitting(true);
     
     try {
-      // 1. Create the slug
-      const slug = newShopName.toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Math.random().toString(36).substring(2, 6);
+      // 1. Create the permanent ID slug from Name + Location
+      const slug = `${newShopName}-${location}`.toLowerCase().replace(/[^a-z0-9]/g, "-").substring(0, 32) + "-" + Math.random().toString(36).substring(2, 6);
       
-      // 2. We use Supabase Auth to invite the user via email
-      // Note: This requires the "Enable Email Invites" to be ON in Supabase Auth settings
-      const { data, error: inviteError } = await (supabase.auth as any).admin.inviteUserByEmail(ownerEmail, {
-        data: { shop_name: newShopName },
-        redirectTo: `${window.location.origin}/setup-password`
-      });
-
-      if (inviteError) throw inviteError;
-
-      // 3. Create the Shop entry linked to that user
+      // 2. Create the Shop entry
       const { error: shopError } = await supabase.from("shops").insert({
         name: newShopName,
-        owner_id: data.user.id,
         location: location,
         slug: slug
       });
 
-      if (shopError) throw shopError;
+      if (shopError) {
+        console.error("DB INSERT ERROR:", shopError);
+        throw shopError;
+      }
 
-      toast.success(`Invite sent to ${ownerEmail}!`);
+      toast.success(`Station Initialized: ${newShopName}`);
       setIsInviteOpen(false);
       fetchShops();
     } catch (err: any) {
-      toast.error(err.message || "Failed to onboard shop.");
+      toast.error(err.message || "Is the SQL Table created in Supabase?");
     } finally {
       setIsSubmitting(false);
     }
