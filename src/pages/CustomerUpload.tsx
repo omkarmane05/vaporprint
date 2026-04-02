@@ -9,10 +9,9 @@ import { Peer } from "peerjs";
 const CustomerUpload = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const [file, setFile] = useState<File | null>(null);
-  const [pageRange, setPageRange] = useState("All");
+  const [copies, setCopies] = useState(1);
   const [code, setCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,9 +25,6 @@ const CustomerUpload = () => {
       return;
     }
     setFile(f);
-    // Create a local blob URL for instant preview
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(f));
   };
 
   const handleUpload = async () => {
@@ -54,8 +50,7 @@ const CustomerUpload = () => {
         fileType: file.type,
         fileSize: file.size,
         fileDataUrl: "STREAMING_REALTIME", 
-        copies: 1, // Defaulting to 1 as we move to page-specific control
-        pageRange: pageRange,
+        copies,
         code: verificationCode,
         timestamp: Date.now(),
         shopId,
@@ -181,47 +176,24 @@ const CustomerUpload = () => {
             </div>
           </div>
 
-          {/* Live Preview Section */}
-          {file && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              className="glass-panel overflow-hidden"
-            >
-              <div className="p-4 border-b border-border/50 flex justify-between items-center bg-secondary/20">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Document Identity</span>
-                <span className="text-[10px] font-bold text-primary">PREVIEW ACTIVE</span>
-              </div>
-              <div className="aspect-[4/5] bg-secondary/30 relative">
-                {file.type.startsWith("image/") ? (
-                  <img src={previewUrl!} alt="Preview" className="w-full h-full object-contain p-4" />
-                ) : (
-                  <iframe src={previewUrl!} title="PDF Preview" className="w-full h-full border-none pointer-events-none" />
-                )}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
-                   <p className="text-white text-xs font-bold">Secure Local Preview Only</p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Page Range Selection */}
-          <div className="glass-panel p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Pages to Print</span>
-              <div className="px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">SMART RANGE</div>
+          {/* Copies */}
+          <div className="glass-panel p-5 flex items-center justify-between">
+            <span className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Quantity</span>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setCopies(Math.max(1, copies - 1))}
+                className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-all active:scale-90"
+              >
+                <Minus size={14} />
+              </button>
+              <span className="font-bold text-xl min-w-[2ch] text-center">{copies}</span>
+              <button
+                onClick={() => setCopies(Math.min(50, copies + 1))}
+                className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-all active:scale-90"
+              >
+                <Plus size={14} />
+              </button>
             </div>
-            
-            <input 
-              type="text"
-              placeholder="e.g. 1-5, 8, 11-13 (or 'All')"
-              value={pageRange}
-              onChange={(e) => setPageRange(e.target.value)}
-              className="w-full bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 text-center font-bold text-lg outline-none focus:ring-4 ring-primary/5 focus:border-primary/40 transition-all placeholder:text-muted-foreground/30 placeholder:font-medium placeholder:text-sm"
-            />
-            <p className="text-[10px] text-center text-muted-foreground/60 italic leading-tight">
-               Specifying your pages now saves time at the counter and reduces waste.
-            </p>
           </div>
 
           <button

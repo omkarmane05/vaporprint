@@ -7,7 +7,6 @@ export interface PrintJob {
   fileSize: number;
   fileDataUrl: string;
   copies: number;
-  pageRange: string;
   code: string;
   timestamp: number;
   shopId: string;
@@ -22,7 +21,6 @@ function rowToJob(row: any): PrintJob {
     fileSize: row.file_size,
     fileDataUrl: row.file_data_url,
     copies: row.copies,
-    pageRange: row.page_range || "All Pages",
     code: row.code,
     timestamp: new Date(row.created_at).getTime(),
     shopId: row.shop_id,
@@ -50,7 +48,6 @@ export async function addJob(shopId: string, job: PrintJob) {
     file_size: job.fileSize,
     file_data_url: job.fileDataUrl,
     copies: job.copies,
-    page_range: job.pageRange,
     code: job.code,
   });
   if (error) {
