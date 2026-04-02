@@ -25,8 +25,8 @@ const LoginPage = () => {
 
       // Check if user is the global Admin or a Shop Owner
       // For now, we can check for a specific admin email or metadata
-      const isAdmin = email === "admin@vaporprint.live"; // Replace with your actual admin email
-      
+      const isAdmin = email === "omkarmane512@gmail.com"; // Replace with your actual admin email
+
       if (isAdmin) {
         toast.success("Welcome, Commander.");
         navigate("/admin");
@@ -37,7 +37,7 @@ const LoginPage = () => {
           .select("slug")
           .eq("owner_id", data.user.id)
           .single();
-          
+
         toast.success("Station Authenticated.");
         if (shopData) {
           navigate(`/dashboard/${shopData.slug}`);
@@ -115,7 +115,7 @@ const LoginPage = () => {
         </form>
 
         <p className="mt-12 text-center text-[10px] uppercase font-bold tracking-[.3em] text-muted-foreground/40">
-           Transmissions Encrypted • VaporPrint Hub
+          Transmissions Encrypted • VaporPrint Hub
         </p>
       </motion.div>
     </div>
