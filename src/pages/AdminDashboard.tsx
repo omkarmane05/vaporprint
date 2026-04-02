@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Printer, Shield, Globe, MapPin, Plus, Trash2, Mail, 
-  Loader2, ArrowLeft, LayoutDashboard, Database, UserPlus 
+  Loader2, ArrowLeft, LayoutDashboard, Database, UserPlus, Link2, Copy 
 } from "lucide-react";
 import { 
   getAllNetworkShops, provisionShop, decommissionShop, 
@@ -63,6 +63,12 @@ const AdminDashboard = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const copyInviteLink = (shop: Shop) => {
+    const inviteUrl = `${window.location.origin}/dashboard/${shop.id}?name=${encodeURIComponent(shop.name)}&loc=${encodeURIComponent(shop.location)}`;
+    navigator.clipboard.writeText(inviteUrl);
+    toast.success(`Invite Link Copied: ${shop.name}`);
   };
 
   const handleDeleteShop = async (id: string, name: string) => {
@@ -186,13 +192,22 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
-                  <button 
-                    onClick={() => handleDeleteShop(shop.id, shop.name)}
-                    className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"
-                    title="Decommission Branch"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => copyInviteLink(shop)}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-primary/20 transition-all active:scale-95 border border-primary/20"
+                      title="Copy Invite Link for Owner"
+                    >
+                      <Link2 size={14} /> COPY INVITE
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteShop(shop.id, shop.name)}
+                      className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"
+                      title="Decommission Branch"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </motion.div>
               ))}
             </div>
