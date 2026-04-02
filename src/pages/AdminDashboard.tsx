@@ -111,15 +111,28 @@ const AdminDashboard = () => {
                 
                 <div className="space-y-3 pt-4 border-t border-border/50">
                   <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground/60">
-                    <span>OPERATOR</span>
+                    <span>STATION ID</span>
                     <span className="text-foreground">{shop.slug}</span>
                   </div>
-                  <button 
-                    onClick={() => navigate(`/dashboard/${shop.slug}`)}
-                    className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-primary/10 hover:text-primary transition-all uppercase"
-                  >
-                    View Station Queue
-                  </button>
+                  
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button 
+                      onClick={() => navigate(`/dashboard/${shop.slug}`)}
+                      className="py-3 bg-secondary/50 rounded-xl text-[10px] font-bold border border-border/50 hover:bg-primary/10 hover:border-primary/30 transition-all uppercase"
+                    >
+                      View Live
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const link = `${window.location.origin}/setup-password?claim=${shop.slug}`;
+                        navigator.clipboard.writeText(link);
+                        toast.success("Branch Activation link copied!");
+                      }}
+                      className="py-3 bg-primary/10 text-primary rounded-xl text-[10px] font-bold hover:bg-primary/20 transition-all uppercase flex items-center justify-center gap-1.5"
+                    >
+                      Copy Invite
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}
