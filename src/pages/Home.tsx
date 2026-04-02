@@ -77,7 +77,7 @@ const Home = () => {
           </button>
         </form>
 
-        <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8">
+        <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8 mb-16">
           {features.map((f, i) => (
             <motion.div
               key={f.title}
@@ -94,6 +94,20 @@ const Home = () => {
             </motion.div>
           ))}
         </div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+          className="pt-10 border-t border-border/40"
+        >
+          <button
+            onClick={() => navigate("/login")}
+            className="flex items-center gap-2 mx-auto text-[10px] font-bold tracking-[.3em] uppercase text-muted-foreground hover:text-primary transition-all group"
+          >
+            <Shield size={14} className="group-hover:rotate-12 transition-transform" /> COMMAND CENTER ACCESS
+          </button>
+        </motion.div>
       </motion.div>
     </div>
   );
