@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Printer, Shield, Clock, Zap } from "lucide-react";
@@ -11,10 +12,21 @@ const features = [
 
 const Home = () => {
   const navigate = useNavigate();
+  const [shopName, setShopName] = useState("");
+  const [location, setLocation] = useState("");
+  const [isInitializing, setIsInitializing] = useState(false);
 
-  const createShop = () => {
-    const shopId = generateShopId();
-    navigate(`/dashboard/${shopId}`);
+  const createShop = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shopName || !location) return;
+    
+    setIsInitializing(true);
+    // Create a permanent-style slug from Name + Location
+    const slug = `${shopName}-${location}`.toLowerCase().replace(/[^a-z0-9]/g, "-").substring(0, 32);
+    const uniqueId = `${slug}-${Math.random().toString(36).substring(2, 6)}`;
+    
+    // Store metadata temporarily? (Or just pass via URL for now)
+    navigate(`/dashboard/${uniqueId}?name=${encodeURIComponent(shopName)}&loc=${encodeURIComponent(location)}`);
   };
 
   return (
@@ -36,12 +48,34 @@ const Home = () => {
           Experience privacy-first document transfer. Files exist only in-flight and vanish the moment they're printed.
         </p>
 
-        <button
-          onClick={createShop}
-          className="bg-primary text-primary-foreground px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel"
-        >
-          Initialize Shop
-        </button>
+        <form onSubmit={createShop} className="max-w-sm mx-auto space-y-4">
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Shop Name (e.g. Central Copy)"
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+              className="w-full bg-secondary/50 border border-border rounded-xl px-5 h-14 font-medium outline-none focus:ring-4 ring-primary/5 focus:border-primary/40 transition-all text-center"
+              required
+            />
+            <input
+              type="text"
+              placeholder="Location (e.g. Main Street)"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full bg-secondary/50 border border-border rounded-xl px-5 h-14 font-medium outline-none focus:ring-4 ring-primary/5 focus:border-primary/40 transition-all text-center"
+              required
+            />
+          </div>
+          
+          <button
+            type="submit"
+            disabled={!shopName || !location || isInitializing}
+            className="w-full bg-primary text-primary-foreground h-16 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel disabled:opacity-50"
+          >
+            {isInitializing ? "Initializing Hub..." : "Initialize New Branch"}
+          </button>
+        </form>
 
         <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8">
           {features.map((f, i) => (

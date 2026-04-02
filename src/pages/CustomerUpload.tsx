@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2 } from "lucide-react";
 import { addJob, generateId, generateCode } from "@/lib/printQueue";
@@ -8,6 +8,9 @@ import { Peer } from "peerjs";
 
 const CustomerUpload = () => {
   const { shopId } = useParams<{ shopId: string }>();
+  const [searchParams] = useSearchParams();
+  const shopName = searchParams.get("name") || "Untitled Shop";
+  const shopLoc = searchParams.get("loc") || "Unknown Location";
   const [file, setFile] = useState<File | null>(null);
   const [copies, setCopies] = useState(1);
   const [code, setCode] = useState<string | null>(null);
@@ -124,15 +127,16 @@ const CustomerUpload = () => {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md space-y-10"
       >
-        <div className="absolute top-4 right-4 text-[10px] font-mono text-muted-foreground/30">
-          Target Node: vprint-shop-{shopId?.toLowerCase()}
+        <div className="absolute top-4 right-4 text-[10px] font-bold text-muted-foreground/30 text-right">
+          NODE: {shopId?.substring(0, 8)}... <br/>
+          @{shopLoc.toUpperCase()}
         </div>
         <header className="text-center">
           <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-6 mx-auto pastel-lavender border border-primary/20">
             <Printer className="text-primary" size={28} />
           </div>
-          <h1 className="text-4xl font-bold tracking-tight mb-3">Upload</h1>
-          <p className="text-muted-foreground font-light">Secure peer-to-peer document transfer</p>
+          <h1 className="text-4xl font-bold tracking-tight mb-3">{shopName}</h1>
+          <p className="text-muted-foreground font-light">Secure peer-to-peer transfer to storefront</p>
         </header>
 
         <div className="space-y-6">

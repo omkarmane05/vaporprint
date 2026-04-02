@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2 } from "lucide-react";
@@ -13,6 +13,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 const ShopDashboard = () => {
   const { shopId } = useParams<{ shopId: string }>();
+  const [searchParams] = useSearchParams();
+  const shopName = searchParams.get("name") || "Untitled Shop";
+  const shopLoc = searchParams.get("loc") || "Unknown Location";
+  
   const jobs = usePrintQueue(shopId || "");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [inputCode, setInputCode] = useState("");
@@ -120,7 +124,7 @@ const ShopDashboard = () => {
 
   if (!shopId) return null;
 
-  const uploadUrl = `${window.location.origin}/upload/${shopId}`;
+  const uploadUrl = `${window.location.origin}/upload/${shopId}${window.location.search}`;
 
   const handlePrint = async (jobId: string, directCode?: string) => {
     const activeCode = directCode || inputCode;
@@ -347,10 +351,12 @@ const ShopDashboard = () => {
               <div className="w-12 h-12 rounded-2xl pastel-lavender flex items-center justify-center border border-primary/20">
                 <Printer className="text-primary" size={24} />
               </div>
-              <h1 className="text-5xl font-extrabold tracking-tighter">Queue</h1>
+            <h1 className="text-5xl font-extrabold tracking-tighter">{shopName}</h1>
             </div>
             <p className="text-muted-foreground font-light text-lg">
-              Authorized Station: <span className="text-primary font-mono font-bold tracking-tight">{shopId}</span>
+              Station Location: <span className="text-primary font-bold tracking-tight uppercase text-sm">{shopLoc}</span>
+              <span className="mx-3 text-border">|</span>
+              ID: <span className="text-muted-foreground/40 font-mono text-xs">{shopId}</span>
             </p>
           </div>
           <div className="flex items-center gap-3 text-[10px] font-bold tracking-[.2em] text-muted-foreground/60 bg-white shadow-sm px-4 py-2 rounded-full border border-border">
