@@ -50,6 +50,41 @@ export type Database = {
         }
         Relationships: []
       }
+      shops: {
+        Row: {
+          created_at: string
+          id: string
+          location: string | null
+          name: string
+          owner_id: string | null
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name: string
+          owner_id?: string | null
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name?: string
+          owner_id?: string | null
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shops_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

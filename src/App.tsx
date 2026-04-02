@@ -5,6 +5,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "./pages/Home";
 import ShopDashboard from "./pages/ShopDashboard";
 import CustomerUpload from "./pages/CustomerUpload";
+import AdminDashboard from "./pages/AdminDashboard";
+import LoginPage from "./pages/LoginPage";
+import SetupPassword from "./pages/SetupPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -16,6 +19,9 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/setup-password" element={<SetupPassword />} />
           <Route path="/dashboard/:shopId" element={<ShopDashboard />} />
           <Route path="/upload/:shopId" element={<CustomerUpload />} />
           <Route path="*" element={<NotFound />} />
