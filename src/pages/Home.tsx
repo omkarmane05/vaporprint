@@ -157,7 +157,7 @@ const Home = () => {
                     >
                        <ShieldAlert className="text-muted-foreground/20 mb-4" size={48} />
                        <p className="text-muted-foreground font-medium text-sm mb-1">No Hubs Assigned</p>
-                       <p className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest">Contact your administrator at: <span className="text-primary italic">omkar@vaporprint.io</span></p>
+                       <p className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest">Contact your administrator at: <span className="text-primary italic text-[11px]">omkarmane512@gmail.com</span></p>
                     </motion.div>
                   )}
                 </AnimatePresence>
