@@ -430,7 +430,7 @@ const ShopDashboard = () => {
                   <div>
                     <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
                     <p className="text-muted-foreground text-[11px] font-bold uppercase tracking-wider flex items-center gap-2">
-                       {job.copies} {job.copies === 1 ? "unit" : "units"} 
+                       PAGES: <span className="text-primary">{job.pageRange}</span>
                        <span className="w-1 h-1 rounded-full bg-border" />
                        {(job.fileSize / 1024).toFixed(0)} KB 
                        <span className="w-1 h-1 rounded-full bg-border" />
