@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Printer, Shield, Clock, Zap, LogOut, User, MapPin, ExternalLink, ShieldAlert, Loader2 } from "lucide-react";
+import { 
+  Printer, Shield, Clock, Zap, LogOut, User, 
+  MapPin, ExternalLink, ShieldAlert, Loader2, ArrowRight 
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { getAssignedShops, Shop } from "@/lib/shops";
+import { getAssignedShops, Shop, ADMIN_EMAIL } from "@/lib/shops";
 
 const features = [
   { icon: Shield, title: "Zero Storage", desc: "Files live in memory only — never written to disk" },
@@ -38,9 +41,14 @@ const Home = () => {
 
   const fetchShops = async () => {
     setLoading(true);
-    const assigned = await getAssignedShops();
-    setShops(assigned);
-    setLoading(false);
+    try {
+      const assigned = await getAssignedShops();
+      setShops(assigned);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -65,6 +73,14 @@ const Home = () => {
         <div>
           {session ? (
             <div className="flex items-center gap-4">
+              {session.user.email === ADMIN_EMAIL && (
+                <Link 
+                  to="/admin" 
+                  className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-bold uppercase tracking-widest border border-primary/20 hover:bg-primary/20 transition-all flex items-center gap-2"
+                >
+                   <Shield size={12} /> Manage Network
+                </Link>
+              )}
               <span className="text-[10px] font-bold text-muted-foreground hidden sm:inline uppercase tracking-[0.2em] bg-secondary/50 px-3 py-1.5 rounded-full">
                  {session.user.email}
               </span>
@@ -89,7 +105,7 @@ const Home = () => {
           animate={{ opacity: 1 }}
           className="text-center max-w-2xl w-full"
         >
-          <div className="mb-12">
+          <div className="mb-12 text-center">
             <h1 className="text-6xl font-extrabold tracking-tighter mb-4">
                Station <span className="text-gradient-pastel">Control</span>
             </h1>
@@ -107,13 +123,13 @@ const Home = () => {
                <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 group-hover:rotate-45 transition-transform">
                   <Shield size={120} />
                </div>
-               <div className="relative z-10 text-center">
+               <div className="relative z-10 text-center flex flex-col items-center">
                   <p className="text-base text-muted-foreground mb-8 font-medium">Access is restricted to authorized shop owners.</p>
                   <Link
                     to="/login"
                     className="inline-flex items-center gap-3 px-10 py-5 bg-primary text-primary-foreground rounded-2xl font-bold text-lg shadow-2xl shadow-primary/30 transition-all hover:scale-105"
                   >
-                    Authenticate Now <ExternalLink size={20} />
+                    Authenticate Now <ArrowRight size={20} />
                   </Link>
                </div>
             </motion.div>
@@ -157,7 +173,7 @@ const Home = () => {
                     >
                        <ShieldAlert className="text-muted-foreground/20 mb-4" size={48} />
                        <p className="text-muted-foreground font-medium text-sm mb-1">No Hubs Assigned</p>
-                       <p className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest">Contact your administrator at: <span className="text-primary italic text-[11px]">omkarmane512@gmail.com</span></p>
+                       <p className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest text-center">Contact your administrator at: <br/><span className="text-primary italic text-[11px]">omkarmane512@gmail.com</span></p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -187,5 +203,12 @@ const Home = () => {
     </div>
   );
 };
+
+// Simplified arrow for the login button
+const ArrowRight = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14M12 5l7 7-7 7"/>
+  </svg>
+);
 
 export default Home;
