@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Users, Shield, MapPin, Mail, Loader2, Signal } from "lucide-react";
+import { Plus, Users, Shield, MapPin, Mail, Loader2, Signal, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -22,9 +22,21 @@ const AdminDashboard = () => {
   }, []);
 
   const fetchShops = async () => {
-    const { data, error } = await supabase.from("shops").select("*");
+    const { data, error } = await supabase.from("shops").select("*").order('created_at', { ascending: false });
     if (!error) setShops(data || []);
     setLoading(false);
+  };
+
+  const handleDeleteShop = async (id: string) => {
+    if (!confirm("Are you sure you want to vaporize this station? All data will be lost.")) return;
+    
+    const { error } = await supabase.from("shops").delete().eq("id", id);
+    if (error) {
+      toast.error("Failed to delete station.");
+    } else {
+      toast.success("Station vaporized successfully.");
+      fetchShops();
+    }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -42,9 +54,20 @@ const AdminDashboard = () => {
         slug: slug
       });
 
-      if (shopError) {
-        console.error("DB INSERT ERROR:", shopError);
-        throw shopError;
+      if (shopError) throw shopError;
+
+      // 3. TRIGGER AUTOMATED EMAIL (Edge Function Call)
+      // This will call a Supabase function to send the professional email
+      const { error: emailError } = await supabase.functions.invoke('onboard-owner', {
+        body: { 
+          email: ownerEmail,
+          shopName: newShopName,
+          activationLink: `${window.location.origin}/setup-password?claim=${slug}`
+        }
+      });
+
+      if (emailError) {
+        console.warn("Email automation skipped (Edge Function not deployed), use Copy Invite link instead.");
       }
 
       toast.success(`Station Initialized: ${newShopName}`);
@@ -99,8 +122,16 @@ const AdminDashboard = () => {
                   <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
                     <Signal className="text-success animate-pulse" size={20} />
                   </div>
-                  <div className="bg-success/10 text-success text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-success/20">
-                    Active Hub
+                  <div className="flex items-center gap-2">
+                    <div className="bg-success/10 text-success text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-success/20">
+                      Active Hub
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteShop(shop.id)}
+                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
                 
