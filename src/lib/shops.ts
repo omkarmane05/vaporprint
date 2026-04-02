@@ -9,7 +9,7 @@ export interface Shop {
 }
 
 // Check if the current user is a Super Admin (Hardcoded to your email for security)
-export const ADMIN_EMAIL = "omkar@vaporprint.io"; // <-- UPDATE THIS TO YOUR ACTUAL EMAIL
+export const ADMIN_EMAIL = "omkarmane512@gmail.com"; 
 
 export async function isAdmin(): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();
