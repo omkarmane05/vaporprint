@@ -6,6 +6,7 @@ import Home from "./pages/Home";
 import ShopDashboard from "./pages/ShopDashboard";
 import CustomerUpload from "./pages/CustomerUpload";
 import LoginPage from "./pages/LoginPage";
+import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
@@ -43,6 +44,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard/:shopId" element={<ProtectedRoute><ShopDashboard /></ProtectedRoute>} />
           <Route path="/upload/:shopId" element={<CustomerUpload />} />
           <Route path="*" element={<NotFound />} />
