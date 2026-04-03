@@ -112,6 +112,7 @@ const ShopDashboard = () => {
             fileName,
             fileType,
           };
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200); // INCOMING HAPTIC
           toast.success(`Received: ${fileName}`);
           chunkBuffer.delete(jobId);
         }
@@ -126,6 +127,7 @@ const ShopDashboard = () => {
             fileName: data.fileName,
             fileType: data.fileType,
           };
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200); // INCOMING HAPTIC
           toast.success(`New file received: ${data.fileName}`);
         }
       });
@@ -161,6 +163,7 @@ const ShopDashboard = () => {
     if (jobData && jobData.blob && jobData.blob.size > 0) {
       const url = URL.createObjectURL(jobData.blob);
       printWindow.location.href = url;
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50); // RELEASE HAPTIC
       toast.success(`Released: ${jobData.fileName}`);
     } else {
       printWindow.close();

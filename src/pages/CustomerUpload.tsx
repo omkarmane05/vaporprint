@@ -97,6 +97,9 @@ const CustomerUpload = () => {
       }
 
       setCode(verificationCode);
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]); // SUCCESS HAPTIC
+      }
       setLoading(false);
       setStatus(null);
     } catch (err: any) {
