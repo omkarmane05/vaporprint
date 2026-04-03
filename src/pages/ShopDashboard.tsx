@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2 } from "lucide-react";
+import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Sparkles, Loader2 } from "lucide-react";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
 import { verifyAndPrint, removeJob } from "@/lib/printQueue";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { Peer } from "peerjs";
 import { supabase } from "@/integrations/supabase/client";
 
 const ShopDashboard = () => {
+  const navigate = useNavigate();
   const { shopId } = useParams<{ shopId: string }>();
   const jobs = usePrintQueue(shopId || "");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -19,11 +20,49 @@ const ShopDashboard = () => {
   const [masterOtp, setMasterOtp] = useState("");
   const masterOtpRef = useRef<HTMLInputElement>(null);
   
-  // Local storage for P2P received files (not on any server!)
+  // SaaS Security States
+  const [isVerifyingShop, setIsVerifyingShop] = useState(true);
+  const [shopData, setShopData] = useState<{ name: string; status: string; password?: string } | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const receivedFiles = useRef<Record<string, { blob: Blob; fileName: string; fileType: string }>>({});
 
   useEffect(() => {
-    if (!shopId) return;
+    const checkShop = async () => {
+      if (!shopId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("shops")
+          .select("name, status, password")
+          .eq("id", shopId)
+          .single();
+
+        if (error || !data) {
+          setIsVerifyingShop(false);
+          return;
+        }
+
+        setShopData(data);
+        
+        // Check if session exists in local storage
+        const savedSession = localStorage.getItem(`vprint_session_${shopId}`);
+        if (savedSession === data.password) {
+          setIsAuthenticated(true);
+        }
+      } catch (err) {
+        console.error("[Shop Check Error]", err);
+      } finally {
+        setIsVerifyingShop(false);
+      }
+    };
+
+    checkShop();
+  }, [shopId]);
+
+  useEffect(() => {
+    if (!shopId || !isAuthenticated) return;
 
     // Initialize Shop Peer with solid STUN servers and lowercase ID
     const peerId = `vprint-shop-${shopId?.toLowerCase()}`;
@@ -271,6 +310,95 @@ const ShopDashboard = () => {
       toast.error("Failed to delete job.");
     }
   };
+
+  const handleLogin = async () => {
+    if (!shopData || !shopId) return;
+    
+    setIsLoggingIn(true);
+    // Simulate minor delay for premium feel
+    await new Promise(r => setTimeout(r, 600));
+
+    if (loginPassword === shopData.password) {
+      setIsAuthenticated(true);
+      localStorage.setItem(`vprint_session_${shopId}`, loginPassword);
+      toast.success(`Welcome back, ${shopData.name}!`);
+    } else {
+      toast.error("Incorrect station password.");
+    }
+    setIsLoggingIn(false);
+  };
+
+  if (isVerifyingShop) {
+    return (
+      <div className="min-h-svh flex items-center justify-center bg-background">
+        <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  if (!shopData) {
+    return (
+      <div className="min-h-svh flex flex-col items-center justify-center p-6 space-y-6">
+        <h1 className="text-4xl font-extrabold tracking-tighter opacity-20 italic">VaporPrint</h1>
+        <p className="text-muted-foreground font-medium text-lg">Station {shopId} does not exist.</p>
+        <button onClick={() => navigate("/")} className="text-primary font-bold hover:underline">Return to Registry</button>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && shopData.status === "active") {
+    return (
+      <div className="min-h-svh flex items-center justify-center p-6 bg-background">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md space-y-10 glass-panel p-10 text-center"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto border border-primary/20">
+             <Lock className="text-primary" size={24} />
+          </div>
+          <div className="space-y-3">
+            <h1 className="text-3xl font-bold tracking-tight italic">{shopData.name}</h1>
+            <p className="text-muted-foreground text-sm font-light">This station is secured. Enter password to unlock.</p>
+          </div>
+          
+          <input
+            type="password"
+            placeholder="Station Password"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all"
+            autoFocus
+          />
+
+          <button
+            onClick={handleLogin}
+            disabled={isLoggingIn || !loginPassword}
+            className="w-full bg-primary text-primary-foreground h-14 rounded-2xl font-bold transition-all hover:brightness-105 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-30"
+          >
+            {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : <Shield size={20} />}
+            {isLoggingIn ? "UNLOCKING..." : "UNLOCK STATION"}
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (shopData.status === "pending") {
+    return (
+      <div className="min-h-svh flex flex-col items-center justify-center p-6 text-center space-y-6">
+        <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center animate-pulse">
+           <Sparkles className="text-muted-foreground/40" size={32} />
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight">Activation Pending</h1>
+        <p className="text-muted-foreground max-w-xs">
+          This shop has been created but not yet activated by the owner.
+        </p>
+        <button onClick={() => navigate("/")} className="text-primary font-bold hover:underline">Back to Safety</button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-svh bg-background p-6 md:p-12 lg:p-16 grid lg:grid-cols-[380px_1fr] gap-12 max-w-[1600px] mx-auto">

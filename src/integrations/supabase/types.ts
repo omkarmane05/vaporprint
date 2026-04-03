@@ -50,6 +50,68 @@ export type Database = {
         }
         Relationships: []
       }
+      shops: {
+        Row: {
+          id: string
+          name: string
+          owner_email: string
+          password: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          owner_email: string
+          password?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          owner_email?: string
+          password?: string | null
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      invitations: {
+        Row: {
+          id: string
+          shop_id: string
+          email: string
+          token: string
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          shop_id: string
+          email: string
+          token: string
+          expires_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          shop_id?: string
+          email?: string
+          token?: string
+          expires_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

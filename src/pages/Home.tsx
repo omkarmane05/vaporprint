@@ -25,7 +25,10 @@ const Home = () => {
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="text-center max-w-lg"
       >
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-8 mx-auto bg-primary/10 border border-primary/20 glow-pastel">
+        <div 
+          onClick={() => navigate("/admin/onboarding")}
+          className="w-20 h-20 rounded-3xl flex items-center justify-center mb-8 mx-auto bg-primary/10 border border-primary/20 glow-pastel cursor-pointer hover:bg-primary/20 transition-all active:scale-90"
+        >
           <Printer className="text-primary" size={36} />
         </div>
 

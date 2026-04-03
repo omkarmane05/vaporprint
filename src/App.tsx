@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "./pages/Home";
 import ShopDashboard from "./pages/ShopDashboard";
 import CustomerUpload from "./pages/CustomerUpload";
+import AdminOnboarding from "./pages/AdminOnboarding";
+import ActivateShop from "./pages/ActivateShop";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -18,6 +20,8 @@ const App = () => (
           <Route path="/" element={<Home />} />
           <Route path="/dashboard/:shopId" element={<ShopDashboard />} />
           <Route path="/upload/:shopId" element={<CustomerUpload />} />
+          <Route path="/admin/onboarding" element={<AdminOnboarding />} />
+          <Route path="/activate/:token" element={<ActivateShop />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
