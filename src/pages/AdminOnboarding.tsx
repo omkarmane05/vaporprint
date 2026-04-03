@@ -104,7 +104,7 @@ const AdminOnboarding = () => {
       fetchShops(); // Refresh the list
     } catch (err: any) {
       console.error("[SaaS Admin Error]", err);
-      toast.error("Failed to generate invite. Check DB permissions.");
+      toast.error(`Database Error: ${err.message || "Protocol Denied"}`);
     } finally {
       setLoading(false);
     }
