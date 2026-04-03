@@ -183,6 +183,13 @@ const ShopDashboard = () => {
     setMasterOtp("");
   };
 
+  const handleLogout = () => {
+    if (!shopId) return;
+    localStorage.removeItem(`vprint_session_${shopId}`);
+    setIsAuthenticated(false);
+    toast.success("Station Secured (Logged Out)");
+  };
+
   const handleLogin = async () => {
     if (!shopData || !shopId) return;
     setIsLoggingIn(true);
@@ -234,7 +241,19 @@ const ShopDashboard = () => {
           <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-6">Network Health</h2>
           <div className="flex items-center gap-3 text-success text-sm font-bold mb-3"><div className="w-2.5 h-2.5 rounded-full bg-success animate-pulse" />PROTOCOL ACTIVE</div>
           <p className="text-xs text-muted-foreground/80 leading-relaxed mb-6 italic">Secure memory buffer enabled. Purging in 10m.</p>
-          <button onClick={() => window.location.reload()} className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all uppercase">Re-Sync Node</button>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all mb-3 uppercase"
+          >
+            Re-Sync Node
+          </button>
+
+          <button 
+            onClick={handleLogout}
+            className="w-full py-3 bg-destructive/10 text-destructive rounded-xl text-[10px] font-bold tracking-widest hover:bg-destructive/20 transition-all uppercase"
+          >
+            SECURE LOGOUT
+          </button>
         </div>
       </aside>
 
