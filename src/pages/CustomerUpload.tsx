@@ -126,10 +126,10 @@ const CustomerUpload = () => {
           <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-6 mx-auto pastel-lavender border border-primary/20">
             <Printer className="text-primary" size={28} />
           </div>
-          <p className="text-primary text-[10px] font-bold uppercase tracking-[0.25em] mb-4">
-            {isVerifying ? "Locating Hub..." : shopName || "VaporPrint Station"}
+          <p className="text-primary text-sm font-black uppercase tracking-[0.4em] mb-2 opacity-80">
+            {isVerifying ? "Locating Hub..." : (shopName || "VaporPrint Station")}
           </p>
-          <h1 className="text-5xl font-extrabold tracking-tighter italic">Upload</h1>
+          <h1 className="text-4xl font-extrabold tracking-tighter italic opacity-90">Upload</h1>
         </header>
 
         <div className="space-y-6">
