@@ -45,6 +45,12 @@ const AdminOnboarding = () => {
     setIsLoadingShops(false);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("vprint_admin_session");
+    setIsAdminAuth(false);
+    toast.success("Master Protocol Terminated (Logged Out)");
+  };
+
   const verifyAdmin = () => {
     if (adminPass === "omkar05") {
       setIsLoggingIn(true);
@@ -165,12 +171,20 @@ const AdminOnboarding = () => {
             </p>
           </div>
           
-          <button
-            onClick={() => setShowOnboard(true)}
-            className="bg-primary text-primary-foreground px-8 py-4 rounded-2xl font-bold transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 flex items-center gap-3"
-          >
-            <Plus size={20} /> INITIATE ONBOARDING
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleLogout}
+              className="px-6 py-2 rounded-xl text-[10px] font-bold tracking-widest text-muted-foreground hover:bg-secondary transition-all uppercase"
+            >
+              LOGOUT PROTOCOL
+            </button>
+            <button
+              onClick={() => setShowOnboard(true)}
+              className="bg-primary text-primary-foreground px-8 py-4 rounded-2xl font-bold transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 flex items-center gap-3"
+            >
+              <Plus size={20} /> INITIATE ONBOARDING
+            </button>
+          </div>
         </header>
 
         {/* Shops Grid */}
