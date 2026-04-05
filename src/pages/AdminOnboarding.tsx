@@ -279,8 +279,8 @@ const AdminOnboarding = () => {
                         </button>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/upload/${shop.id}`);
-                            toast.success("Customer upload link copied!");
+                            navigator.clipboard.writeText(`${window.location.origin}/dashboard/${shop.id}`);
+                            toast.success("Dashboard link copied!");
                           }}
                           className="p-2 text-muted-foreground hover:text-primary transition-all rounded-lg hover:bg-primary/5"
                           title="Copy Customer Upload Link"
