@@ -44,7 +44,6 @@ export function usePrintQueue(shopId: string): PrintJob[] {
           filter: `shop_id=eq.${shopId}`,
         },
         (payload) => {
-          console.log("[Realtime Alert]", payload);
           fetchJobs();
         }
       )

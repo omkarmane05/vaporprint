@@ -12,7 +12,6 @@ export interface PrintJob {
   shopId: string;
 }
 
-// Map DB row to our PrintJob interface
 function rowToJob(row: any): PrintJob {
   return {
     id: row.id,
@@ -51,7 +50,6 @@ export async function addJob(shopId: string, job: PrintJob) {
     code: job.code,
   });
   if (error) {
-    console.error("[VaporPrint] Failed to add job:", error.message);
     throw error;
   }
 }
@@ -64,7 +62,6 @@ export async function getQueue(shopId: string): Promise<PrintJob[]> {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[VaporPrint] Failed to fetch queue:", error.message);
     return [];
   }
   return (data || []).map(rowToJob);
@@ -86,25 +83,12 @@ export async function verifyAndPrint(shopId: string, jobId: string, code: string
 
   const job = rowToJob(data);
 
-  // Vaporize Job Metadata from DB (File data was never stored on server!)
+  // Vaporize Job Metadata from DB (File data was never stored on server)
   await supabase.from("print_jobs").delete().eq("id", jobId);
 
   return job;
 }
 
-// Auto-expire jobs metadata older than 10 minutes
-setInterval(async () => {
-  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  
-  // Fetch expired jobs to get their IDs
-  const { data } = await supabase
-    .from("print_jobs")
-    .select("id")
-    .lt("created_at", tenMinAgo);
-
-  if (data && data.length > 0) {
-    const ids = data.map(j => j.id);
-    console.log(`[VaporPrint] 🗑️ Vaporizing ${data.length} expired job metadata entries`);
-    await supabase.from("print_jobs").delete().in("id", ids);
-  }
-}, 30000);
+// NOTE: Auto-expiry is now handled by the cleanup_expired_jobs RPC
+// called from ShopDashboard (authenticated, scoped to owner's shops).
+// No more global setInterval running on every page load.

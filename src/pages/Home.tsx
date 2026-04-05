@@ -1,7 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Printer, Shield, Clock, Zap } from "lucide-react";
-import { generateShopId } from "@/lib/printQueue";
 
 const features = [
   { icon: Shield, title: "Zero Storage", desc: "Files live in memory only — never written to disk" },
@@ -12,11 +11,6 @@ const features = [
 const Home = () => {
   const navigate = useNavigate();
 
-  const createShop = () => {
-    const shopId = generateShopId();
-    navigate(`/dashboard/${shopId}`);
-  };
-
   return (
     <div className="min-h-svh flex flex-col items-center justify-center p-6">
       <motion.div
@@ -25,7 +19,7 @@ const Home = () => {
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="text-center max-w-lg"
       >
-        <div 
+        <div
           onClick={() => navigate("/admin/onboarding")}
           className="w-20 h-20 rounded-3xl flex items-center justify-center mb-8 mx-auto bg-primary/10 border border-primary/20 glow-pastel cursor-pointer hover:bg-primary/20 transition-all active:scale-90"
         >
@@ -40,10 +34,10 @@ const Home = () => {
         </p>
 
         <button
-          onClick={createShop}
+          onClick={() => navigate("/admin/onboarding")}
           className="bg-primary text-primary-foreground px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel"
         >
-          Initialize Shop
+          Get Started
         </button>
 
         <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8">

@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Mail, Building, Copy, Shield, Sparkles, LayoutGrid, Radio, Trash2, Loader2, X, Lock } from "lucide-react";
+import { Plus, Mail, Building, Copy, Shield, Sparkles, LayoutGrid, Radio, Trash2, Loader2, X, Lock, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 const AdminOnboarding = () => {
   const navigate = useNavigate();
   const [isAdminAuth, setIsAdminAuth] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+  const [adminEmail, setAdminEmail] = useState("");
   const [adminPass, setAdminPass] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -16,52 +18,74 @@ const AdminOnboarding = () => {
   const [isLoadingShops, setIsLoadingShops] = useState(true);
   const [showOnboard, setShowOnboard] = useState(false);
 
-  // Onboarding Form States
   const [shopName, setShopName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [lastInvite, setLastInvite] = useState<{ name: string; url: string } | null>(null);
 
   useEffect(() => {
-    // Check local session for admin
-    const session = localStorage.getItem("vprint_admin_session");
-    if (session === "omkar05") setIsAdminAuth(true);
+    checkAdminSession();
   }, []);
 
   useEffect(() => {
-    if (isAdminAuth) {
-      fetchShops();
-    }
+    if (isAdminAuth) fetchShops();
   }, [isAdminAuth]);
+
+  const checkAdminSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.app_metadata?.role === "admin") {
+        setIsAdminAuth(true);
+      }
+    } catch {
+      // No session
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!adminEmail || !adminPass) return;
+    setIsLoggingIn(true);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: adminEmail,
+      password: adminPass,
+    });
+
+    if (error) {
+      toast.error("Authentication failed: " + error.message);
+      setIsLoggingIn(false);
+      return;
+    }
+
+    if (data.user?.app_metadata?.role !== "admin") {
+      toast.error("Access denied. Admin privileges required.");
+      await supabase.auth.signOut();
+      setIsLoggingIn(false);
+      return;
+    }
+
+    setIsAdminAuth(true);
+    setIsLoggingIn(false);
+    toast.success("Master Admin Access Granted");
+  };
 
   const fetchShops = async () => {
     setIsLoadingShops(true);
     const { data, error } = await supabase
       .from("shops")
-      .select("*")
+      .select("id, name, owner_email, status, created_at")
       .order("created_at", { ascending: false });
 
     if (!error && data) setShops(data);
     setIsLoadingShops(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("vprint_admin_session");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setIsAdminAuth(false);
     toast.success("Master Protocol Terminated (Logged Out)");
-  };
-
-  const verifyAdmin = () => {
-    if (adminPass === "omkar05") {
-      setIsLoggingIn(true);
-      setTimeout(() => {
-        setIsAdminAuth(true);
-        localStorage.setItem("vprint_admin_session", "omkar05");
-        toast.success("Master Admin Access Granted");
-      }, 800);
-    } else {
-      toast.error("Invalid Master Password");
-    }
   };
 
   const generateInvite = async () => {
@@ -70,41 +94,47 @@ const AdminOnboarding = () => {
       return;
     }
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    if (shopName.length < 2 || shopName.length > 60) {
+      toast.error("Shop name must be 2-60 characters.");
+      return;
+    }
+
     setLoading(true);
-    // Generate a unique ID (the shop's slug)
     const baseSlug = shopName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const shopId = `vprint-${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
     const inviteToken = crypto.randomUUID();
     const activationUrl = `${window.location.origin}/activate/${inviteToken}`;
 
     try {
-      // 1. Create the Shop
       const { error: shopError } = await supabase.from("shops").insert({
         id: shopId,
         name: shopName,
         owner_email: email,
         status: "pending"
       });
-
       if (shopError) throw shopError;
 
-      // 2. Create the Invitation
       const { error: inviteError } = await supabase.from("invitations").insert({
         shop_id: shopId,
         email: email,
         token: inviteToken
       });
-
       if (inviteError) throw inviteError;
 
       setLastInvite({ name: shopName, url: activationUrl });
       toast.success(`Invite generated for ${shopName}!`);
       setShopName("");
       setEmail("");
-      fetchShops(); // Refresh the list
+      fetchShops();
     } catch (err: any) {
-      console.error("[SaaS Admin Error]", err);
-      toast.error(`Database Error: ${err.message || "Protocol Denied"}`);
+      toast.error(`Error: ${err.message || "Protocol Denied"}`);
     } finally {
       setLoading(false);
     }
@@ -119,34 +149,51 @@ const AdminOnboarding = () => {
     }
   };
 
+  if (isChecking) {
+    return (
+      <div className="min-h-svh flex items-center justify-center bg-background">
+        <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
   if (!isAdminAuth) {
     return (
       <div className="min-h-svh flex items-center justify-center bg-background p-6">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md glass-panel p-10 text-center space-y-10"
+          className="w-full max-w-md glass-panel p-10 text-center space-y-8"
         >
           <div className="w-20 h-20 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20 mx-auto glow-pastel">
             <Lock className="text-primary" size={32} />
           </div>
           <div className="space-y-3">
             <h1 className="text-3xl font-extrabold tracking-tighter italic">ADMIN GATEWAY</h1>
-            <p className="text-muted-foreground text-sm font-light uppercase tracking-widest">Protocol Check Required</p>
+            <p className="text-muted-foreground text-sm font-light uppercase tracking-widest">Supabase Auth Protected</p>
           </div>
-          <input
-            type="password"
-            placeholder="Protocol Password"
-            value={adminPass}
-            onChange={(e) => setAdminPass(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && verifyAdmin()}
-            className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all"
-            autoFocus
-          />
+          <div className="space-y-4">
+            <input
+              type="email"
+              placeholder="Admin Email"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all"
+              autoFocus
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={adminPass}
+              onChange={(e) => setAdminPass(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+              className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all"
+            />
+          </div>
           <button
-            onClick={verifyAdmin}
-            disabled={isLoggingIn || !adminPass}
-            className="w-full bg-primary text-primary-foreground h-14 rounded-2xl font-bold transition-all hover:brightness-110 active:scale-95 flex items-center justify-center gap-3 shadow-xl"
+            onClick={handleLogin}
+            disabled={isLoggingIn || !adminEmail || !adminPass}
+            className="w-full bg-primary text-primary-foreground h-14 rounded-2xl font-bold transition-all hover:brightness-110 active:scale-95 flex items-center justify-center gap-3 shadow-xl disabled:opacity-30"
           >
             {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : "ACCESS TERMINAL"}
           </button>
@@ -167,16 +214,16 @@ const AdminOnboarding = () => {
               <h1 className="text-5xl font-extrabold tracking-tighter">Controller</h1>
             </div>
             <p className="text-muted-foreground font-light text-lg tracking-tight italic">
-              Logged in as Master Admin • Protocol 05
+              Logged in as Master Admin • Auth Protected
             </p>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <button
               onClick={handleLogout}
-              className="px-6 py-2 rounded-xl text-[10px] font-bold tracking-widest text-muted-foreground hover:bg-secondary transition-all uppercase"
+              className="px-6 py-2 rounded-xl text-[10px] font-bold tracking-widest text-muted-foreground hover:bg-secondary transition-all uppercase flex items-center gap-2"
             >
-              LOGOUT PROTOCOL
+              <LogOut size={12} /> LOGOUT
             </button>
             <button
               onClick={() => setShowOnboard(true)}
@@ -187,73 +234,72 @@ const AdminOnboarding = () => {
           </div>
         </header>
 
-        {/* Shops Grid */}
         <div className="grid gap-6">
-           <div className="flex items-center justify-between mb-2 px-2">
-             <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground/60 flex items-center gap-3">
-               <Radio size={12} className="text-primary animate-pulse" /> LIVE STATIONS
-             </h2>
-           </div>
+          <div className="flex items-center justify-between mb-2 px-2">
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground/60 flex items-center gap-3">
+              <Radio size={12} className="text-primary animate-pulse" /> LIVE STATIONS
+            </h2>
+          </div>
 
-           {isLoadingShops ? (
-             <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-primary/40" size={48} /></div>
-           ) : shops.length === 0 ? (
-             <div className="py-32 text-center glass-panel opacity-40">
-                <LayoutGrid className="mx-auto mb-6 text-muted-foreground/20" size={48} />
-                <p className="text-lg font-medium text-muted-foreground">No stations active on your protocol.</p>
-             </div>
-           ) : (
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               <AnimatePresence>
-                 {shops.map((shop) => (
-                   <motion.div
-                     key={shop.id}
-                     layout
-                     initial={{ opacity: 0, scale: 0.95 }}
-                     animate={{ opacity: 1, scale: 1 }}
-                     exit={{ opacity: 0, scale: 0.95 }}
-                     className="glass-panel p-8 space-y-6 hover:shadow-2xl transition-all border-primary/5 hover:border-primary/20"
-                   >
-                     <div className="flex items-start justify-between">
-                       <div className="space-y-2">
-                         <h3 className="text-xl font-bold tracking-tight">{shop.name}</h3>
-                         <p className="text-[10px] font-mono text-muted-foreground/60 truncate max-w-[200px]">{shop.id}</p>
-                       </div>
-                       <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${shop.status === 'active' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
-                         {shop.status}
-                       </div>
-                     </div>
-                     <div className="pt-6 border-t border-border/50 flex justify-between items-center">
-                       <div className="flex items-center gap-3">
-                         <button 
-                           onClick={() => navigate(`/dashboard/${shop.id}`)}
-                           className="text-[10px] font-bold tracking-widest text-primary hover:tracking-[0.2em] transition-all"
-                         >
-                           OPEN
-                         </button>
-                         <button 
-                           onClick={() => {
-                             navigator.clipboard.writeText(`${window.location.origin}/dashboard/${shop.id}`);
-                             toast.success("Dashboard link copied!");
-                           }}
-                           className="p-2 text-muted-foreground hover:text-primary transition-all rounded-lg hover:bg-primary/5"
-                           title="Copy Dashboard Link"
-                         >
-                           <Copy size={16} />
-                         </button>
-                       </div>
-                       <button 
-                         onClick={() => deleteShop(shop.id)}
-                         className="p-2 text-muted-foreground hover:text-destructive transition-all"
-                       >
-                         <Trash2 size={16} />
-                       </button>
-                     </div>
-                   </motion.div>
-                 ))}
-               </AnimatePresence>
-             </div>
-           )}
+          {isLoadingShops ? (
+            <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-primary/40" size={48} /></div>
+          ) : shops.length === 0 ? (
+            <div className="py-32 text-center glass-panel opacity-40">
+              <LayoutGrid className="mx-auto mb-6 text-muted-foreground/20" size={48} />
+              <p className="text-lg font-medium text-muted-foreground">No stations active on your protocol.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <AnimatePresence>
+                {shops.map((shop) => (
+                  <motion.div
+                    key={shop.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="glass-panel p-8 space-y-6 hover:shadow-2xl transition-all border-primary/5 hover:border-primary/20"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2">
+                        <h3 className="text-xl font-bold tracking-tight">{shop.name}</h3>
+                        <p className="text-[10px] font-mono text-muted-foreground/60 truncate max-w-[200px]">{shop.id}</p>
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${shop.status === 'active' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
+                        {shop.status}
+                      </div>
+                    </div>
+                    <div className="pt-6 border-t border-border/50 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => navigate(`/dashboard/${shop.id}`)}
+                          className="text-[10px] font-bold tracking-widest text-primary hover:tracking-[0.2em] transition-all"
+                        >
+                          OPEN
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/upload/${shop.id}`);
+                            toast.success("Customer upload link copied!");
+                          }}
+                          className="p-2 text-muted-foreground hover:text-primary transition-all rounded-lg hover:bg-primary/5"
+                          title="Copy Customer Upload Link"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => deleteShop(shop.id)}
+                        className="p-2 text-muted-foreground hover:text-destructive transition-all"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
         {/* Onboarding Overlay */}
@@ -293,6 +339,7 @@ const AdminOnboarding = () => {
                       placeholder="High-end Printing Hub..."
                       value={shopName}
                       onChange={(e) => setShopName(e.target.value)}
+                      maxLength={60}
                       className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-16 font-bold text-lg outline-none focus:ring-4 ring-primary/5 transition-all"
                     />
                   </div>
@@ -343,7 +390,6 @@ const AdminOnboarding = () => {
             </div>
           )}
         </AnimatePresence>
-
       </div>
     </div>
   );

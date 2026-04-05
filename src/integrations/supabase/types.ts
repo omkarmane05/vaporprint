@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
@@ -55,7 +53,7 @@ export type Database = {
           id: string
           name: string
           owner_email: string
-          password: string | null
+          owner_id: string | null
           status: string
           created_at: string
         }
@@ -63,7 +61,7 @@ export type Database = {
           id: string
           name: string
           owner_email: string
-          password?: string | null
+          owner_id?: string | null
           status?: string
           created_at?: string
         }
@@ -71,7 +69,7 @@ export type Database = {
           id?: string
           name?: string
           owner_email?: string
-          password?: string | null
+          owner_id?: string | null
           status?: string
           created_at?: string
         }
@@ -117,7 +115,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      activate_shop: {
+        Args: { p_invitation_token: string; p_shop_id: string }
+        Returns: undefined
+      }
+      cleanup_expired_jobs: {
+        Args: Record<string, never>
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
