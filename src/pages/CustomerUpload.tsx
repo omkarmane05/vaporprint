@@ -61,7 +61,8 @@ const CustomerUpload = () => {
       setStatus("Establishing Relay... (100% Reliable Mode)");
       const CHUNK_SIZE = 100 * 1024; // Safer chunk size for Supabase Realtime (200KB limit)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      const channel = supabase.channel(`vprint-relay-${shopId}`);
+      const safeShopId = shopId.toLowerCase();
+      const channel = supabase.channel(`vprint-relay-${safeShopId}`);
 
       setStatus("Syncing Metadata...");
       await addJob(shopId, {
@@ -92,7 +93,7 @@ const CustomerUpload = () => {
       });
 
       peer.on('open', () => {
-        const conn = peer.connect(`vprint-shop-${shopId?.toLowerCase()}`);
+        const conn = peer.connect(`vprint-shop-${safeShopId}`);
         conn.on('open', () => {
           conn.send({
             type: "FILE_TRANSFER",

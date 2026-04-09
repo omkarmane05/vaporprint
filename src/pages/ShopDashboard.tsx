@@ -28,6 +28,7 @@ const ShopDashboard = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [receivingProgress, setReceivingProgress] = useState<Record<string, number>>({});
   const receivedFiles = useRef<Record<string, { blob: Blob; fileName: string; fileType: string }>>({});
+  const chunkBuffer = useRef<Map<string, string[]>>(new Map());
 
   useEffect(() => {
     checkShopAndAuth();
@@ -67,11 +68,12 @@ const ShopDashboard = () => {
     }
   };
 
-  // PeerJS + Relay connection (Starts as soon as shopId is available)
+  // PeerJS + Relay connection (Starts early, doesn't reset on auth change)
   useEffect(() => {
     if (!shopId) return;
 
-    const peerId = `vprint-shop-${shopId?.toLowerCase()}`;
+    const safeShopId = shopId.toLowerCase();
+    const peerId = `vprint-shop-${safeShopId}`;
     const peer = new Peer(peerId, {
       config: {
         iceServers: [
@@ -87,17 +89,15 @@ const ShopDashboard = () => {
       },
     });
 
-    const chunkBuffer = new Map<string, string[]>();
-
-    const relayChannel = supabase.channel(`vprint-relay-${shopId}`)
+    const relayChannel = supabase.channel(`vprint-relay-${safeShopId}`)
       .on("broadcast", { event: "chunk" }, (payload: any) => {
         const { jobId, chunkIndex, totalChunks, data, fileName, fileType } = payload.payload;
 
-        if (!chunkBuffer.has(jobId)) {
-          chunkBuffer.set(jobId, new Array(totalChunks).fill(null));
+        if (!chunkBuffer.current.has(jobId)) {
+          chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
         }
 
-        const chunks = chunkBuffer.get(jobId)!;
+        const chunks = chunkBuffer.current.get(jobId)!;
         chunks[chunkIndex] = data;
 
         const receivedCount = chunks.filter(c => c !== null).length;
@@ -120,7 +120,7 @@ const ShopDashboard = () => {
           };
           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
           toast.success(`Received: ${fileName}`);
-          chunkBuffer.delete(jobId);
+          chunkBuffer.current.delete(jobId);
         }
       })
       .subscribe();
@@ -140,24 +140,24 @@ const ShopDashboard = () => {
       });
     });
 
-    let cleanupInterval: NodeJS.Timeout | null = null;
-    if (isAuthenticated) {
-      // Auto-cleanup expired jobs (scoped to this owner via RPC)
-      cleanupInterval = setInterval(async () => {
-        try {
-          await supabase.rpc("cleanup_expired_jobs");
-        } catch {
-          // Silent fail
-        }
-      }, 30000);
-    }
-
     return () => {
       peer.destroy();
       supabase.removeChannel(relayChannel);
-      if (cleanupInterval) clearInterval(cleanupInterval);
     };
-  }, [shopId, isAuthenticated]);
+  }, [shopId]);
+
+  // Cleanup interval effect (Isolated from connection logic)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const cleanupInterval = setInterval(async () => {
+      try {
+        await supabase.rpc("cleanup_expired_jobs");
+      } catch {
+        // Silent fail
+      }
+    }, 30000);
+    return () => clearInterval(cleanupInterval);
+  }, [isAuthenticated]);
 
   const handlePrint = async (jobId: string, directCode?: string) => {
     const activeCode = directCode || inputCode;
