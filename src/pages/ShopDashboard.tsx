@@ -26,6 +26,7 @@ const ShopDashboard = () => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [receivingProgress, setReceivingProgress] = useState<Record<string, number>>({});
   const receivedFiles = useRef<Record<string, { blob: Blob; fileName: string; fileType: string }>>({});
 
   useEffect(() => {
@@ -98,6 +99,9 @@ const ShopDashboard = () => {
 
         const chunks = chunkBuffer.get(jobId)!;
         chunks[chunkIndex] = data;
+
+        const receivedCount = chunks.filter(c => c !== null).length;
+        setReceivingProgress(prev => ({ ...prev, [jobId]: Math.round((receivedCount / totalChunks) * 100) }));
 
         if (chunks.every(c => c !== null)) {
           const byteArrays = chunks.map(base64 => {
@@ -337,7 +341,18 @@ const ShopDashboard = () => {
               <motion.div key={job.id} layout initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="glass-panel p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 hover:shadow-2xl transition-all">
                 <div className="flex items-center gap-6">
                   <div className="w-16 h-16 rounded-2xl pastel-lavender flex items-center justify-center border border-primary/10 flex-shrink-0"><FileText className="text-primary/60" size={28} /></div>
-                  <div><h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3><p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p></div>
+                  <div>
+                    <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
+                    <div className="flex items-center gap-2">
+                      <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
+                      {receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100 && (
+                        <span className="text-primary text-[10px] font-black animate-pulse">STREAMING: {receivingProgress[job.id]}%</span>
+                      )}
+                      {receivingProgress[job.id] === 100 && (
+                        <span className="text-success text-[10px] font-black">READY</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {verifyingId === job.id ? (

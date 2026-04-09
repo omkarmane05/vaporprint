@@ -76,6 +76,18 @@ const CustomerUpload = () => {
         shopId,
       });
 
+      // Subscribe and wait for connection before sending
+      await new Promise<void>((resolve, reject) => {
+        channel.subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            resolve();
+          }
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            reject(new Error(`Relay connection failed: ${status}`));
+          }
+        });
+      });
+
       setStatus(`Streaming: 0%`);
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
@@ -86,14 +98,28 @@ const CustomerUpload = () => {
           new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
         );
 
-        await channel.send({
+        const sendResult = await channel.send({
           type: "broadcast",
           event: "chunk",
           payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
         });
+
+        if (sendResult !== 'ok') {
+          console.warn(`Chunk ${i} send failed with status: ${sendResult}`);
+          // Retry once after a small delay
+          await new Promise(r => setTimeout(r, 200));
+          await channel.send({
+            type: "broadcast",
+            event: "chunk",
+            payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
+          });
+        }
         
         const percent = Math.round(((i + 1) / totalChunks) * 100);
         setStatus(`Streaming: ${percent}%`);
+        
+        // Small throttle to prevent rate-limit drops
+        if (totalChunks > 5) await new Promise(r => setTimeout(r, 40));
       }
 
       setCode(verificationCode);
@@ -102,6 +128,9 @@ const CustomerUpload = () => {
       }
       setLoading(false);
       setStatus(null);
+      
+      // Cleanup channel after a delay to ensure last chunk is received
+      setTimeout(() => supabase.removeChannel(channel), 5000);
     } catch (err: any) {
       console.error("[Link Error]", err);
       setStatus(`Link Failed: ${err.message || "Unknown error"}`);
