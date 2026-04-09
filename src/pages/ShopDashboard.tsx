@@ -191,9 +191,31 @@ const ShopDashboard = () => {
     }
 
     const url = URL.createObjectURL(jobData.blob);
-    printWindow.location.href = url;
+    
+    // For PDFs and Images, we can try to render them directly for printing
+    if (jobData.fileType === "application/pdf" || jobData.fileType.startsWith("image/")) {
+      printWindow.document.body.style.margin = "0";
+      printWindow.document.body.innerHTML = jobData.fileType === "application/pdf" 
+        ? `<embed src="${url}" type="application/pdf" width="100%" height="100%">`
+        : `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><img src="${url}" style="max-width:100%;height:auto;box-shadow:0 0 50px rgba(0,0,0,0.1)"></div>`;
+      
+      // Attempt to auto-print after a small load delay
+      setTimeout(() => {
+        try { printWindow.print(); } catch (e) {}
+      }, 1000);
+    } else {
+      // For other types, we have to let the browser handle it (which might download)
+      printWindow.location.href = url;
+    }
+
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
     toast.success(`Released: ${jobData.fileName}`);
+
+    // VAPORIZE: Revoke the local URL after 60 seconds to ensure it doesn't persist in memory
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      delete receivedFiles.current[jobId];
+    }, 60000);
 
     setInputCode("");
     setVerifyingId(null);
