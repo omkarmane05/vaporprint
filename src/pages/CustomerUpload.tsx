@@ -59,7 +59,7 @@ const CustomerUpload = () => {
 
     try {
       setStatus("Establishing Relay... (100% Reliable Mode)");
-      const CHUNK_SIZE = 200 * 1024;
+      const CHUNK_SIZE = 100 * 1024; // Safer chunk size for Supabase Realtime (200KB limit)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const channel = supabase.channel(`vprint-relay-${shopId}`);
 

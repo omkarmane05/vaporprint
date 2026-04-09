@@ -25,10 +25,10 @@ DROP POLICY IF EXISTS "Anyone can delete print jobs" ON public.print_jobs;
 -- =============================================
 ALTER TABLE public.shops ENABLE ROW LEVEL SECURITY;
 
--- Public can read basic shop info (customer upload needs shop name)
+-- Public can read basic shop info (active shops only)
 CREATE POLICY "shops_select_public"
   ON public.shops FOR SELECT TO anon, authenticated
-  USING (true);
+  USING (status = 'active');
 
 -- Only admin can create shops
 CREATE POLICY "shops_insert_admin"
@@ -57,10 +57,11 @@ CREATE POLICY "shops_update_admin_or_owner"
 -- =============================================
 ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 
--- Public can read by token (tokens are unguessable UUIDs)
-CREATE POLICY "invitations_select_public"
-  ON public.invitations FOR SELECT TO anon, authenticated
-  USING (true);
+-- Public CANNOT read invitations directly (Security Definition: logic handled via activate_shop RPC)
+-- Only admin can see all invitations
+CREATE POLICY "invitations_select_admin"
+  ON public.invitations FOR SELECT TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
 -- Only admin can create invitations
 CREATE POLICY "invitations_insert_admin"

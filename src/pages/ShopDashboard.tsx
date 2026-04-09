@@ -66,9 +66,9 @@ const ShopDashboard = () => {
     }
   };
 
-  // PeerJS + Relay connection (only when authenticated)
+  // PeerJS + Relay connection (Starts as soon as shopId is available)
   useEffect(() => {
-    if (!shopId || !isAuthenticated) return;
+    if (!shopId) return;
 
     const peerId = `vprint-shop-${shopId?.toLowerCase()}`;
     const peer = new Peer(peerId, {
@@ -135,30 +135,48 @@ const ShopDashboard = () => {
       });
     });
 
-    // Auto-cleanup expired jobs (scoped to this owner via RPC)
-    const cleanupInterval = setInterval(async () => {
-      try {
-        await supabase.rpc("cleanup_expired_jobs");
-      } catch {
-        // Silent fail
-      }
-    }, 30000);
+    let cleanupInterval: NodeJS.Timeout | null = null;
+    if (isAuthenticated) {
+      // Auto-cleanup expired jobs (scoped to this owner via RPC)
+      cleanupInterval = setInterval(async () => {
+        try {
+          await supabase.rpc("cleanup_expired_jobs");
+        } catch {
+          // Silent fail
+        }
+      }, 30000);
+    }
 
     return () => {
       peer.destroy();
       supabase.removeChannel(relayChannel);
-      clearInterval(cleanupInterval);
+      if (cleanupInterval) clearInterval(cleanupInterval);
     };
   }, [shopId, isAuthenticated]);
 
   const handlePrint = async (jobId: string, directCode?: string) => {
     const activeCode = directCode || inputCode;
 
+    if (!activeCode || activeCode.length < 4) {
+      toast.error("Please enter the verification code.");
+      return;
+    }
+
+    const jobData = receivedFiles.current[jobId];
+    if (!jobData || !jobData.blob || jobData.blob.size === 0) {
+      toast.error("File data missing or still streaming. Please wait or ask customer to re-upload.");
+      return;
+    }
+
+    // PRE-EMPTIVE POPUP AVOIDANCE: Open window immediately on user-thread
     const printWindow = window.open("about:blank", "_blank");
     if (!printWindow) {
       toast.error("Popup blocked! Please allow popups for this station.");
       return;
     }
+
+    // Set a loading state in the popup
+    printWindow.document.write("<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#666'><h3>Vaporizing into document format...</h3></body></html>");
 
     const job = await verifyAndPrint(shopId || "", jobId, activeCode);
 
@@ -168,16 +186,10 @@ const ShopDashboard = () => {
       return;
     }
 
-    const jobData = receivedFiles.current[jobId];
-    if (jobData && jobData.blob && jobData.blob.size > 0) {
-      const url = URL.createObjectURL(jobData.blob);
-      printWindow.location.href = url;
-      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
-      toast.success(`Released: ${jobData.fileName}`);
-    } else {
-      printWindow.close();
-      toast.error("File data missing or empty. Please have customer re-upload.");
-    }
+    const url = URL.createObjectURL(jobData.blob);
+    printWindow.location.href = url;
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
+    toast.success(`Released: ${jobData.fileName}`);
 
     setInputCode("");
     setVerifyingId(null);
