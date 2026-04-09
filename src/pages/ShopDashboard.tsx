@@ -133,8 +133,9 @@ const ShopDashboard = () => {
             fileName: data.fileName,
             fileType: data.fileType,
           };
+          setReceivingProgress(prev => ({ ...prev, [data.jobId]: 100 }));
           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
-          toast.success(`New file received: ${data.fileName}`);
+          toast.success(`New file received via P2P: ${data.fileName}`);
         }
       });
     });

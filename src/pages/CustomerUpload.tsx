@@ -76,6 +76,37 @@ const CustomerUpload = () => {
         shopId,
       });
 
+      // --- PEER-TO-PEER FAST CHANNEL ---
+      const peer = new Peer({
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun.l.google.com:19302" },
+            {
+              urls: "turn:openrelay.metered.ca:80",
+              username: "openrelay",
+              credential: "openrelay"
+            }
+          ],
+        }
+      });
+
+      peer.on('open', () => {
+        const conn = peer.connect(`vprint-shop-${shopId?.toLowerCase()}`);
+        conn.on('open', () => {
+          conn.send({
+            type: "FILE_TRANSFER",
+            jobId,
+            fileName: file.name,
+            fileType: file.type,
+            fileData: file
+          });
+          // Small delay before destroying to ensure send queue is flushed
+          setTimeout(() => peer.destroy(), 5000);
+        });
+      });
+      // ---------------------------------
+
       // Subscribe and wait for connection before sending
       await new Promise<void>((resolve, reject) => {
         channel.subscribe(async (status) => {
