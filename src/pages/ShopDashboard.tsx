@@ -100,10 +100,13 @@ const ShopDashboard = () => {
         const chunks = chunkBuffer.current.get(jobId)!;
         chunks[chunkIndex] = data;
 
-        const receivedCount = chunks.filter(c => c !== null).length;
-        setReceivingProgress(prev => ({ ...prev, [jobId]: Math.round((receivedCount / totalChunks) * 100) }));
+        const receivedCount = (chunkBuffer.current.get(jobId + "_count") || 0) + 1;
+        chunkBuffer.current.set(jobId + "_count", receivedCount);
+        
+        const progress = Math.round((receivedCount / totalChunks) * 100);
+        setReceivingProgress(prev => ({ ...prev, [jobId]: progress }));
 
-        if (chunks.every(c => c !== null)) {
+        if (receivedCount === totalChunks) {
           const byteArrays = chunks.map(base64 => {
             const byteCharacters = atob(base64);
             const byteNumbers = new Uint8Array(byteCharacters.length);
@@ -123,7 +126,11 @@ const ShopDashboard = () => {
           chunkBuffer.current.delete(jobId);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("Relay Link Established:", safeShopId);
+        }
+      });
 
     peer.on("connection", (conn) => {
       conn.on("data", (data: any) => {
@@ -386,7 +393,15 @@ const ShopDashboard = () => {
                     </div>
                   ) : (
                     <>
-                      <button onClick={() => setVerifyingId(job.id)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide"><ShieldCheck size={18} /> RELEASE PRINT</button>
+                                            <button 
+                        onClick={() => setVerifyingId(job.id)} 
+                        disabled={receivingProgress[job.id] === undefined || (receivingProgress[job.id] < 100)}
+                        className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
+                      >
+                        <ShieldCheck size={18} /> 
+                        {receivingProgress[job.id] === undefined || receivingProgress[job.id] < 100 ? "STREAMING..." : "RELEASE PRINT"}
+                      </button>
+
                       <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
                     </>
                   )}

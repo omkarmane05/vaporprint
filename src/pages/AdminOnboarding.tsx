@@ -270,23 +270,35 @@ const AdminOnboarding = () => {
                       </div>
                     </div>
                     <div className="pt-6 border-t border-border/50 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/dashboard/${shop.id}`)}
-                          className="text-[10px] font-bold tracking-widest text-primary hover:tracking-[0.2em] transition-all"
+                          className="text-[10px] font-bold tracking-widest text-primary hover:tracking-[0.2em] transition-all px-2 py-1"
                         >
                           OPEN
                         </button>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/dashboard/${shop.id}`);
-                            toast.success("Dashboard link copied!");
-                          }}
-                          className="p-2 text-muted-foreground hover:text-primary transition-all rounded-lg hover:bg-primary/5"
-                          title="Copy Customer Upload Link"
-                        >
-                          <Copy size={16} />
-                        </button>
+                        <div className="flex items-center gap-1 border-l border-border/50 pl-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/dashboard/${shop.id}`);
+                              toast.success("Dashboard link copied!");
+                            }}
+                            className="p-2 text-muted-foreground hover:text-primary transition-all rounded-lg hover:bg-primary/5"
+                            title="Copy Dashboard Link"
+                          >
+                            <LayoutGrid size={14} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/upload/${shop.id}`);
+                              toast.success("Customer Upload link copied!");
+                            }}
+                            className="p-2 text-muted-foreground hover:text-primary transition-all rounded-lg hover:bg-primary/5"
+                            title="Copy Customer Upload Link"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
                       </div>
                       <button
                         onClick={() => deleteShop(shop.id)}
