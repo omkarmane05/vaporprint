@@ -90,6 +90,14 @@ const ShopDashboard = () => {
     });
 
     const relayChannel = supabase.channel(`vprint-relay-${safeShopId}`)
+      .on("broadcast", { event: "handshake" }, (payload: any) => {
+        const { jobId, totalChunks } = payload.payload;
+        if (!chunkBuffer.current.has(jobId)) {
+          chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
+          chunkBuffer.current.set(jobId + "_count", 0);
+          setReceivingProgress(prev => ({ ...prev, [jobId]: 0 }));
+        }
+      })
       .on("broadcast", { event: "chunk" }, (payload: any) => {
         const { jobId, chunkIndex, totalChunks, data, fileName, fileType } = payload.payload;
 
@@ -112,22 +120,23 @@ const ShopDashboard = () => {
 
           if (currentCount === totalChunks) {
             const byteArrays = chunks.map(base64 => {
-            const byteCharacters = atob(base64);
-            const byteNumbers = new Uint8Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            return byteNumbers;
-          });
+              const byteCharacters = atob(base64);
+              const byteNumbers = new Uint8Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              return byteNumbers;
+            });
 
-          receivedFiles.current[jobId] = {
-            blob: new Blob(byteArrays, { type: fileType }),
-            fileName,
-            fileType,
-          };
-          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
-          toast.success(`Received: ${fileName}`);
-          chunkBuffer.current.delete(jobId);
+            receivedFiles.current[jobId] = {
+              blob: new Blob(byteArrays, { type: fileType }),
+              fileName,
+              fileType,
+            };
+            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
+            toast.success(`Received: ${fileName}`);
+            chunkBuffer.current.delete(jobId);
+          }
         }
       })
       .subscribe((status) => {
@@ -139,8 +148,9 @@ const ShopDashboard = () => {
     peer.on("connection", (conn) => {
       conn.on("data", (data: any) => {
         if (data.type === "FILE_TRANSFER") {
+          const blob = data.fileData instanceof Blob ? data.fileData : new Blob([data.fileData], { type: data.fileType });
           receivedFiles.current[data.jobId] = {
-            blob: new Blob([data.fileData], { type: data.fileType }),
+            blob,
             fileName: data.fileName,
             fileType: data.fileType,
           };

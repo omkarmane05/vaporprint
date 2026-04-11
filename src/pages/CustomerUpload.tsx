@@ -56,7 +56,7 @@ const CustomerUpload = () => {
 
     const verificationCode = generateCode();
     const jobId = generateId();
-    setCode(verificationCode); // SHOW CODE IMMEDIATELY
+    setCode(verificationCode); // Show code immediately
 
     try {
       const safeShopId = shopId.toLowerCase();
@@ -104,34 +104,46 @@ const CustomerUpload = () => {
             fileType: file.type,
             fileData: file
           });
-          // Small delay before destroying to ensure send queue is flushed
-          setTimeout(() => peer.destroy(), 5000);
+          // Keep connection alive for a reasonable window for large files
+          setTimeout(() => peer.destroy(), 30000); 
         });
       });
       // ---------------------------------
 
       // Subscribe and wait for connection before sending
       await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 10000);
         channel.subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
+            clearTimeout(timeout);
             resolve();
           }
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            clearTimeout(timeout);
             reject(new Error(`Relay connection failed: ${status}`));
           }
         });
       });
 
+      // Send Handshake
+      await channel.send({
+        type: "broadcast",
+        event: "handshake",
+        payload: { jobId, totalChunks, fileName: file.name }
+      });
+
       setStatus(`Streaming: 0%`);
-      setCode(verificationCode); // SHOW CODE IMMEDIATELY AS SOON AS METADATA IS SYNCED
+      const CHUNK_THROTTLE = totalChunks > 50 ? 20 : 40;
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunkContent = file.slice(start, end);
         const buffer = await chunkContent.arrayBuffer();
+        
+        // More efficient binary to base64
         const base64Chunk = btoa(
-          new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+          String.fromCharCode.apply(null, new Uint8Array(buffer) as any)
         );
 
         const sendResult = await channel.send({
@@ -141,9 +153,7 @@ const CustomerUpload = () => {
         });
 
         if (sendResult !== 'ok') {
-          console.warn(`Chunk ${i} send failed with status: ${sendResult}`);
-          // Retry once after a small delay
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 100));
           await channel.send({
             type: "broadcast",
             event: "chunk",
@@ -155,7 +165,7 @@ const CustomerUpload = () => {
         setStatus(`Streaming: ${percent}%`);
         
         // Small throttle to prevent rate-limit drops
-        if (totalChunks > 5) await new Promise(r => setTimeout(r, 40));
+        if (totalChunks > 2) await new Promise(r => setTimeout(r, CHUNK_THROTTLE));
       }
 
       if (typeof navigator !== "undefined" && navigator.vibrate) {
