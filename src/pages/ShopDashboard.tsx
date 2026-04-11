@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 const ShopDashboard = () => {
   const navigate = useNavigate();
   const { shopId } = useParams<{ shopId: string }>();
-  const jobs = usePrintQueue(shopId || "");
+  const { jobs, fetchJobs } = usePrintQueue(shopId || "");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [inputCode, setInputCode] = useState("");
   const [masterOtp, setMasterOtp] = useState("");
@@ -96,6 +96,7 @@ const ShopDashboard = () => {
           chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
           chunkBuffer.current.set(jobId + "_count", 0);
           setReceivingProgress(prev => ({ ...prev, [jobId]: 0 }));
+          fetchJobs(); // AUTONOMOUS SYNC
         }
       })
       .on("broadcast", { event: "chunk" }, (payload: any) => {
@@ -104,6 +105,7 @@ const ShopDashboard = () => {
         if (!chunkBuffer.current.has(jobId)) {
           chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
           chunkBuffer.current.set(jobId + "_count", 0);
+          fetchJobs(); // AUTONOMOUS SYNC (if handshake missed)
         }
 
         const chunks = chunkBuffer.current.get(jobId)!;
@@ -416,7 +418,7 @@ const ShopDashboard = () => {
                         {receivingProgress[job.id] === undefined || receivingProgress[job.id] < 100 ? "STREAMING..." : "RELEASE PRINT"}
                       </button>
 
-                      <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
+                      <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
                     </>
                   )}
                 </div>

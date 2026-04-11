@@ -16,7 +16,7 @@ function rowToJob(row: any): PrintJob {
   };
 }
 
-export function usePrintQueue(shopId: string): PrintJob[] {
+export function usePrintQueue(shopId: string): { jobs: PrintJob[]; fetchJobs: () => Promise<void> } {
   const [jobs, setJobs] = useState<PrintJob[]>([]);
 
   const fetchJobs = useCallback(async () => {
@@ -43,7 +43,7 @@ export function usePrintQueue(shopId: string): PrintJob[] {
           table: "print_jobs",
           filter: `shop_id=eq.${shopId}`,
         },
-        (payload) => {
+        () => {
           fetchJobs();
         }
       )
@@ -54,5 +54,5 @@ export function usePrintQueue(shopId: string): PrintJob[] {
     };
   }, [shopId, fetchJobs]);
 
-  return jobs;
+  return { jobs, fetchJobs };
 }
