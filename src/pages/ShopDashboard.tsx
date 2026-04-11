@@ -201,8 +201,35 @@ const ShopDashboard = () => {
       return;
     }
 
-    // Set a loading state in the popup
-    printWindow.document.write("<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#666'><h3>Vaporizing into document format...</h3></body></html>");
+    // Set a loading state and security scripts in the popup
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>VaporPrint - Secure Session</title>
+          <style>
+            body { 
+              display:flex; align-items:center; justify-content:center; 
+              height:100vh; margin:0; font-family:sans-serif; background:#f4f4f5; color:#666; 
+              user-select:none; -webkit-user-select:none; 
+            }
+            .no-print { @media print { display: none; } }
+          </style>
+          <script>
+            // Block right-click and save shortcuts
+            window.addEventListener('contextmenu', e => e.preventDefault());
+            window.addEventListener('keydown', e => {
+              if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'save')) {
+                e.preventDefault();
+                alert('Security Policy: Direct saving is disabled on this station.');
+              }
+            });
+          </script>
+        </head>
+        <body>
+          <h3>Vaporizing into document format...</h3>
+        </body>
+      </html>
+    `);
 
     const job = await verifyAndPrint(shopId || "", jobId, activeCode);
 
@@ -218,7 +245,7 @@ const ShopDashboard = () => {
     if (jobData.fileType === "application/pdf" || jobData.fileType.startsWith("image/")) {
       printWindow.document.body.style.margin = "0";
       printWindow.document.body.innerHTML = jobData.fileType === "application/pdf" 
-        ? `<embed src="${url}" type="application/pdf" width="100%" height="100%">`
+        ? `<embed src="${url}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" width="100%" height="100%">`
         : `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><img src="${url}" style="max-width:100%;height:auto;box-shadow:0 0 50px rgba(0,0,0,0.1)"></div>`;
       
       // Attempt to auto-print after a small load delay
@@ -226,18 +253,19 @@ const ShopDashboard = () => {
         try { printWindow.print(); } catch (e) {}
       }, 1000);
     } else {
-      // For other types, we have to let the browser handle it (which might download)
+      // For other types, we have to let the browser handle it
+      // Note: This may still trigger a download for unknown types, but we've hidden it as much as possible
       printWindow.location.href = url;
     }
 
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
     toast.success(`Released: ${jobData.fileName}`);
 
-    // VAPORIZE: Revoke the local URL after 60 seconds to ensure it doesn't persist in memory
+    // VAPORIZE: Revoke the local URL very quickly after the print dialog is triggered
     setTimeout(() => {
       URL.revokeObjectURL(url);
       delete receivedFiles.current[jobId];
-    }, 60000);
+    }, 15000); // Reduced to 15 seconds for maximum ephemerality
 
     setInputCode("");
     setVerifyingId(null);
