@@ -95,19 +95,23 @@ const ShopDashboard = () => {
 
         if (!chunkBuffer.current.has(jobId)) {
           chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
+          chunkBuffer.current.set(jobId + "_count", 0);
         }
 
         const chunks = chunkBuffer.current.get(jobId)!;
-        chunks[chunkIndex] = data;
-
-        const receivedCount = (chunkBuffer.current.get(jobId + "_count") || 0) + 1;
-        chunkBuffer.current.set(jobId + "_count", receivedCount);
         
-        const progress = Math.round((receivedCount / totalChunks) * 100);
-        setReceivingProgress(prev => ({ ...prev, [jobId]: progress }));
+        // Only process if we haven't received this chunk yet
+        if (chunks[chunkIndex] === null) {
+          chunks[chunkIndex] = data;
+          
+          const currentCount = (chunkBuffer.current.get(jobId + "_count") as number) + 1;
+          chunkBuffer.current.set(jobId + "_count", currentCount);
+          
+          const progress = Math.round((currentCount / totalChunks) * 100);
+          setReceivingProgress(prev => ({ ...prev, [jobId]: progress }));
 
-        if (receivedCount === totalChunks) {
-          const byteArrays = chunks.map(base64 => {
+          if (currentCount === totalChunks) {
+            const byteArrays = chunks.map(base64 => {
             const byteCharacters = atob(base64);
             const byteNumbers = new Uint8Array(byteCharacters.length);
             for (let i = 0; i < byteCharacters.length; i++) {

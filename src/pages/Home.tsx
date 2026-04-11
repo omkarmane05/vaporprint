@@ -8,8 +8,26 @@ const features = [
   { icon: Zap, title: "Instant Queue", desc: "Real-time updates across browser tabs" },
 ];
 
+import { useState, useEffect } from "react";
+
 const Home = () => {
   const navigate = useNavigate();
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+  }, []);
+
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') setDeferredPrompt(null);
+    }
+  };
 
   return (
     <div className="min-h-svh flex flex-col items-center justify-center p-6">
@@ -33,12 +51,23 @@ const Home = () => {
           Experience privacy-first document transfer. Files exist only in-flight and vanish the moment they're printed.
         </p>
 
-        <button
-          onClick={() => navigate("/admin/onboarding")}
-          className="bg-primary text-primary-foreground px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel"
-        >
-          Get Started
-        </button>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <button
+            onClick={() => navigate("/admin/onboarding")}
+            className="bg-primary text-primary-foreground px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:brightness-110 active:scale-95 shadow-xl shadow-primary/20 glow-pastel w-full sm:w-auto"
+          >
+            Get Started
+          </button>
+          
+          {deferredPrompt && (
+            <button
+              onClick={handleInstall}
+              className="bg-secondary text-primary px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:bg-black/5 active:scale-95 border border-primary/20 w-full sm:w-auto"
+            >
+              Install Desktop App
+            </button>
+          )}
+        </div>
 
         <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8">
           {features.map((f, i) => (

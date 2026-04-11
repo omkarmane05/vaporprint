@@ -52,19 +52,16 @@ const CustomerUpload = () => {
   const handleUpload = async () => {
     if (!file) return;
     setLoading(true);
-    setStatus("Connecting to shop...");
+    setStatus("Syncing Metadata...");
 
     const verificationCode = generateCode();
     const jobId = generateId();
+    setCode(verificationCode); // SHOW CODE IMMEDIATELY
 
     try {
-      setStatus("Establishing Relay... (100% Reliable Mode)");
-      const CHUNK_SIZE = 100 * 1024; // Safer chunk size for Supabase Realtime (200KB limit)
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const safeShopId = shopId.toLowerCase();
-      const channel = supabase.channel(`vprint-relay-${safeShopId}`);
-
-      setStatus("Syncing Metadata...");
+      
+      // Step 1: Add to Database Queue (Metadata)
       await addJob(shopId, {
         id: jobId,
         fileName: file.name,
@@ -77,17 +74,22 @@ const CustomerUpload = () => {
         shopId,
       });
 
+      setStatus("Establishing Relay...");
+      const CHUNK_SIZE = 100 * 1024; // 100KB chunks
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const channel = supabase.channel(`vprint-relay-${safeShopId}`, {
+        config: {
+          broadcast: { self: false, ack: true }
+        }
+      });
+
       // --- PEER-TO-PEER FAST CHANNEL ---
       const peer = new Peer({
         config: {
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun.l.google.com:19302" },
-            {
-              urls: "turn:openrelay.metered.ca:80",
-              username: "openrelay",
-              credential: "openrelay"
-            }
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "turn:openrelay.metered.ca:80", username: "openrelay", credential: "openrelay" }
           ],
         }
       });
@@ -121,6 +123,8 @@ const CustomerUpload = () => {
       });
 
       setStatus(`Streaming: 0%`);
+      setCode(verificationCode); // SHOW CODE IMMEDIATELY AS SOON AS METADATA IS SYNCED
+
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -154,7 +158,6 @@ const CustomerUpload = () => {
         if (totalChunks > 5) await new Promise(r => setTimeout(r, 40));
       }
 
-      setCode(verificationCode);
       if (typeof navigator !== "undefined" && navigator.vibrate) {
         navigator.vibrate([100, 50, 100]); // SUCCESS HAPTIC
       }
@@ -171,13 +174,35 @@ const CustomerUpload = () => {
   };
 
   if (code) {
+    const isTransferred = !loading && !status;
     return (
       <div className="min-h-svh flex items-center justify-center p-6 bg-background">
         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center glass-panel p-16 max-w-sm w-full">
-          <div className="w-24 h-24 rounded-3xl flex items-center justify-center mb-10 mx-auto pastel-mint border border-success/20"><ShieldCheck className="text-success" size={48} /></div>
+          <div className="w-24 h-24 rounded-3xl flex items-center justify-center mb-10 mx-auto pastel-mint border border-success/20">
+            {isTransferred ? <ShieldCheck className="text-success" size={48} /> : <Loader2 className="text-primary animate-spin" size={48} />}
+          </div>
           <p className="text-muted-foreground mb-4 font-medium italic">Station: {shopName || shopId}</p>
-          <h2 className="text-7xl font-bold tracking-tighter text-primary mb-10">{code}</h2>
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-bold">Transient Session • Locked</p>
+          <h2 className="text-7xl font-bold tracking-tighter text-primary mb-6">{code}</h2>
+          
+          <div className="mb-10">
+            {!isTransferred ? (
+              <div className="space-y-2">
+                <p className="text-sm font-bold text-primary animate-pulse">{status}</p>
+                <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }} 
+                    animate={{ width: status?.includes("%") ? status.split(":")[1].trim() : "0%" }}
+                    className="h-full bg-primary"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground italic">Moving data to station... Keep tab open.</p>
+              </div>
+            ) : (
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-bold">Transient Session • Locked</p>
+            )}
+          </div>
+          
+          <p className="text-xs text-muted-foreground">Give this code to the station operator to release your document.</p>
         </motion.div>
       </div>
     );
