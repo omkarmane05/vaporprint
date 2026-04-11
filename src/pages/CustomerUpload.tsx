@@ -104,15 +104,13 @@ const CustomerUpload = () => {
             fileType: file.type,
             fileData: file
           });
-          // Keep connection alive for a reasonable window for large files
-          setTimeout(() => peer.destroy(), 30000); 
+          setTimeout(() => peer.destroy(), 60000); // 1 minute window
         });
       });
-      // ---------------------------------
 
       // Subscribe and wait for connection before sending
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 10000);
+        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 15000);
         channel.subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             clearTimeout(timeout);
@@ -125,15 +123,18 @@ const CustomerUpload = () => {
         });
       });
 
-      // Send Handshake
-      await channel.send({
-        type: "broadcast",
-        event: "handshake",
-        payload: { jobId, totalChunks, fileName: file.name }
-      });
+      // SYNC DELAY: Wait for Dashboard to see the DB record and subscribe
+      setStatus("Synchronizing with Station...");
+      await new Promise(r => setTimeout(r, 1500));
+
+      // Redundant Handshake
+      const handshake = { jobId, totalChunks, fileName: file.name };
+      await channel.send({ type: "broadcast", event: "handshake", payload: handshake });
+      await new Promise(r => setTimeout(r, 200));
+      await channel.send({ type: "broadcast", event: "handshake", payload: handshake });
 
       setStatus(`Streaming: 0%`);
-      const CHUNK_THROTTLE = totalChunks > 50 ? 20 : 40;
+      const CHUNK_THROTTLE = totalChunks > 50 ? 30 : 50;
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
@@ -141,10 +142,13 @@ const CustomerUpload = () => {
         const chunkContent = file.slice(start, end);
         const buffer = await chunkContent.arrayBuffer();
         
-        // More efficient binary to base64
-        const base64Chunk = btoa(
-          String.fromCharCode.apply(null, new Uint8Array(buffer) as any)
-        );
+        // Stack-safe base64 conversion
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let j = 0; j < bytes.length; j++) {
+          binary += String.fromCharCode(bytes[j]);
+        }
+        const base64Chunk = btoa(binary);
 
         const sendResult = await channel.send({
           type: "broadcast",
@@ -153,7 +157,7 @@ const CustomerUpload = () => {
         });
 
         if (sendResult !== 'ok') {
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise(r => setTimeout(r, 200));
           await channel.send({
             type: "broadcast",
             event: "chunk",
@@ -164,18 +168,15 @@ const CustomerUpload = () => {
         const percent = Math.round(((i + 1) / totalChunks) * 100);
         setStatus(`Streaming: ${percent}%`);
         
-        // Small throttle to prevent rate-limit drops
+        // Prevent rate-limit drops
         if (totalChunks > 2) await new Promise(r => setTimeout(r, CHUNK_THROTTLE));
       }
 
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate([100, 50, 100]); // SUCCESS HAPTIC
-      }
       setLoading(false);
       setStatus(null);
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
       
-      // Cleanup channel after a delay to ensure last chunk is received
-      setTimeout(() => supabase.removeChannel(channel), 5000);
+      setTimeout(() => supabase.removeChannel(channel), 10000);
     } catch (err: any) {
       console.error("[Link Error]", err);
       setStatus(`Link Failed: ${err.message || "Unknown error"}`);
