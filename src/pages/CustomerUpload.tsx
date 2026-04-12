@@ -75,7 +75,7 @@ const CustomerUpload = () => {
       });
 
       setStatus("Establishing Relay...");
-      const CHUNK_SIZE = 100 * 1024; // 100KB chunks
+      const CHUNK_SIZE = 50 * 1024; // 50KB chunks (safer for mobile/Realtime limits)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const channel = supabase.channel(`vprint-relay-${safeShopId}`, {
         config: {
@@ -94,6 +94,10 @@ const CustomerUpload = () => {
         }
       });
 
+      peer.on('error', (err) => {
+        console.warn("[P2P Warning] Signal path failed, falling back to Relay.", err);
+      });
+
       peer.on('open', () => {
         const conn = peer.connect(`vprint-shop-${safeShopId}`);
         conn.on('open', () => {
@@ -104,21 +108,26 @@ const CustomerUpload = () => {
             fileType: file.type,
             fileData: file
           });
-          setTimeout(() => peer.destroy(), 60000); // 1 minute window
+          // Keep it open for a bit to ensure delivery before destroying
+          setTimeout(() => peer.destroy(), 30000); 
+        });
+        
+        conn.on('error', (err) => {
+          console.warn("[P2P Connection Error] Falling back to Relay.", err);
         });
       });
 
       // Subscribe and wait for connection before sending
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 15000);
+        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 20000);
         channel.subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             clearTimeout(timeout);
             resolve();
           }
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             clearTimeout(timeout);
-            reject(new Error(`Relay connection failed: ${status}`));
+            reject(new Error(`Connection failed (${status})`));
           }
         });
       });
@@ -130,11 +139,11 @@ const CustomerUpload = () => {
       // Redundant Handshake
       const handshake = { jobId, totalChunks, fileName: file.name };
       await channel.send({ type: "broadcast", event: "handshake", payload: handshake });
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 300));
       await channel.send({ type: "broadcast", event: "handshake", payload: handshake });
 
       setStatus(`Streaming: 0%`);
-      const CHUNK_THROTTLE = totalChunks > 50 ? 30 : 50;
+      const CHUNK_THROTTLE = totalChunks > 50 ? 50 : 80; // Slightly higher throttle for reliability
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
@@ -157,12 +166,17 @@ const CustomerUpload = () => {
         });
 
         if (sendResult !== 'ok') {
-          await new Promise(r => setTimeout(r, 200));
-          await channel.send({
+          // Retry logic
+          await new Promise(r => setTimeout(r, 500));
+          const retryResult = await channel.send({
             type: "broadcast",
             event: "chunk",
             payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
           });
+          
+          if (retryResult !== 'ok') {
+            throw new Error(`Data stream interrupted (index ${i})`);
+          }
         }
         
         const percent = Math.round(((i + 1) / totalChunks) * 100);
@@ -176,10 +190,12 @@ const CustomerUpload = () => {
       setStatus(null);
       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
       
-      setTimeout(() => supabase.removeChannel(channel), 10000);
+      setTimeout(() => supabase.removeChannel(channel), 15000);
     } catch (err: any) {
       console.error("[Link Error]", err);
-      setStatus(`Link Failed: ${err.message || "Unknown error"}`);
+      // Simplify error message for the user as requested
+      const errorMessage = err.message === "Connection timeout" ? "Connection timeout - Is the station dashboard open?" : err.message;
+      setStatus(`Connection failed: ${errorMessage}`);
       setLoading(false);
     }
   };

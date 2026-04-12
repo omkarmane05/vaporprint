@@ -89,7 +89,18 @@ const ShopDashboard = () => {
       },
     });
 
-    const relayChannel = supabase.channel(`vprint-relay-${safeShopId}`)
+    peer.on("error", (err) => {
+      console.error("[P2P Station Error]", err);
+      if (err.type === 'id-taken') {
+        toast.error("Station ID collision: Is the dashboard open in another tab? P2P disabled for this session.");
+      }
+    });
+
+    const relayChannel = supabase.channel(`vprint-relay-${safeShopId}`, {
+      config: {
+        broadcast: { ack: true }
+      }
+    })
       .on("broadcast", { event: "handshake" }, (payload: any) => {
         const { jobId, totalChunks } = payload.payload;
         if (!chunkBuffer.current.has(jobId)) {
@@ -144,6 +155,10 @@ const ShopDashboard = () => {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log("Relay Link Established:", safeShopId);
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error("Relay Link Failed:", status);
+          toast.error("Realtime network error. Please refresh the dashboard.");
         }
       });
 
