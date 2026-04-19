@@ -13,5 +13,10 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
+  realtime: {
+    heartbeatIntervalMs: 15000,
+    timeout: 20000,
+    reconnectAfterMs: (tries: number) => Math.min(1000 * 2 ** tries, 10000),
+  },
 });

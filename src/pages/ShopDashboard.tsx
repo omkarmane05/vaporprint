@@ -74,6 +74,14 @@ const ShopDashboard = () => {
 
     const safeShopId = shopId.toLowerCase();
     const peerId = `vprint-shop-${safeShopId}`;
+    let destroyed = false;
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let relayChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    const MAX_RETRIES = 5;
+    const getBackoff = (attempt: number) => Math.min(1000 * 2 ** attempt, 10000);
+
     const peer = new Peer(peerId, {
       config: {
         iceServers: [
@@ -96,71 +104,103 @@ const ShopDashboard = () => {
       }
     });
 
-    const relayChannel = supabase.channel(`vprint-relay-${safeShopId}`, {
-      config: {
-        broadcast: { ack: true }
+    // --- Relay channel handler callbacks (stable across reconnects) ---
+    const handleHandshake = (payload: any) => {
+      const { jobId, totalChunks } = payload.payload;
+      if (!chunkBuffer.current.has(jobId)) {
+        chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
+        chunkBuffer.current.set(jobId + "_count", 0);
+        setReceivingProgress(prev => ({ ...prev, [jobId]: 0 }));
+        fetchJobs(); // AUTONOMOUS SYNC
       }
-    })
-      .on("broadcast", { event: "handshake" }, (payload: any) => {
-        const { jobId, totalChunks } = payload.payload;
-        if (!chunkBuffer.current.has(jobId)) {
-          chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
-          chunkBuffer.current.set(jobId + "_count", 0);
-          setReceivingProgress(prev => ({ ...prev, [jobId]: 0 }));
-          fetchJobs(); // AUTONOMOUS SYNC
+    };
+
+    const handleChunk = (payload: any) => {
+      const { jobId, chunkIndex, totalChunks, data, fileName, fileType } = payload.payload;
+
+      if (!chunkBuffer.current.has(jobId)) {
+        chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
+        chunkBuffer.current.set(jobId + "_count", 0);
+        fetchJobs(); // AUTONOMOUS SYNC (if handshake missed)
+      }
+
+      const chunks = chunkBuffer.current.get(jobId)!;
+
+      // Only process if we haven't received this chunk yet
+      if (chunks[chunkIndex] === null) {
+        chunks[chunkIndex] = data;
+
+        const currentCount = (chunkBuffer.current.get(jobId + "_count") as number) + 1;
+        chunkBuffer.current.set(jobId + "_count", currentCount);
+
+        const progress = Math.round((currentCount / totalChunks) * 100);
+        setReceivingProgress(prev => ({ ...prev, [jobId]: progress }));
+
+        if (currentCount === totalChunks) {
+          const byteArrays = chunks.map(base64 => {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Uint8Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            return byteNumbers;
+          });
+
+          receivedFiles.current[jobId] = {
+            blob: new Blob(byteArrays, { type: fileType }),
+            fileName,
+            fileType,
+          };
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
+          toast.success(`Received: ${fileName}`);
+          chunkBuffer.current.delete(jobId);
         }
-      })
-      .on("broadcast", { event: "chunk" }, (payload: any) => {
-        const { jobId, chunkIndex, totalChunks, data, fileName, fileType } = payload.payload;
+      }
+    };
 
-        if (!chunkBuffer.current.has(jobId)) {
-          chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
-          chunkBuffer.current.set(jobId + "_count", 0);
-          fetchJobs(); // AUTONOMOUS SYNC (if handshake missed)
-        }
+    // --- Subscribe with auto-retry ---
+    const subscribeRelay = () => {
+      if (destroyed) return;
 
-        const chunks = chunkBuffer.current.get(jobId)!;
-        
-        // Only process if we haven't received this chunk yet
-        if (chunks[chunkIndex] === null) {
-          chunks[chunkIndex] = data;
-          
-          const currentCount = (chunkBuffer.current.get(jobId + "_count") as number) + 1;
-          chunkBuffer.current.set(jobId + "_count", currentCount);
-          
-          const progress = Math.round((currentCount / totalChunks) * 100);
-          setReceivingProgress(prev => ({ ...prev, [jobId]: progress }));
+      // Clean up previous channel if it exists
+      if (relayChannel) {
+        supabase.removeChannel(relayChannel);
+        relayChannel = null;
+      }
 
-          if (currentCount === totalChunks) {
-            const byteArrays = chunks.map(base64 => {
-              const byteCharacters = atob(base64);
-              const byteNumbers = new Uint8Array(byteCharacters.length);
-              for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-              }
-              return byteNumbers;
-            });
+      relayChannel = supabase
+        .channel(`vprint-relay-${safeShopId}`, {
+          config: { broadcast: { ack: true } },
+        })
+        .on("broadcast", { event: "handshake" }, handleHandshake)
+        .on("broadcast", { event: "chunk" }, handleChunk)
+        .subscribe((status) => {
+          if (destroyed) return;
 
-            receivedFiles.current[jobId] = {
-              blob: new Blob(byteArrays, { type: fileType }),
-              fileName,
-              fileType,
-            };
-            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
-            toast.success(`Received: ${fileName}`);
-            chunkBuffer.current.delete(jobId);
+          if (status === "SUBSCRIBED") {
+            console.log("Relay Link Established:", safeShopId);
+            if (retryCount > 0) {
+              toast.success("Relay reconnected successfully.");
+            }
+            retryCount = 0; // Reset on success
           }
-        }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log("Relay Link Established:", safeShopId);
-        }
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error("Relay Link Failed:", status);
-          toast.error("Realtime network error. Please refresh the dashboard.");
-        }
-      });
+
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error("Relay Link Failed:", status, `(attempt ${retryCount + 1}/${MAX_RETRIES})`);
+
+            if (retryCount < MAX_RETRIES) {
+              const delay = getBackoff(retryCount);
+              retryCount++;
+              console.log(`Relay retry #${retryCount} in ${delay}ms...`);
+              retryTimer = setTimeout(subscribeRelay, delay);
+            } else {
+              toast.error("Realtime network error. Please refresh the dashboard.");
+            }
+          }
+        });
+    };
+
+    subscribeRelay();
 
     peer.on("connection", (conn) => {
       conn.on("data", (data: any) => {
@@ -179,8 +219,10 @@ const ShopDashboard = () => {
     });
 
     return () => {
+      destroyed = true;
+      if (retryTimer) clearTimeout(retryTimer);
       peer.destroy();
-      supabase.removeChannel(relayChannel);
+      if (relayChannel) supabase.removeChannel(relayChannel);
     };
   }, [shopId]);
 
@@ -230,17 +272,17 @@ const ShopDashboard = () => {
     }
 
     const url = URL.createObjectURL(jobData.blob);
-    
+
     // For PDFs and Images, we can try to render them directly for printing
     if (jobData.fileType === "application/pdf" || jobData.fileType.startsWith("image/")) {
       printWindow.document.body.style.margin = "0";
-      printWindow.document.body.innerHTML = jobData.fileType === "application/pdf" 
+      printWindow.document.body.innerHTML = jobData.fileType === "application/pdf"
         ? `<embed src="${url}" type="application/pdf" width="100%" height="100%">`
         : `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><img src="${url}" style="max-width:100%;height:auto;box-shadow:0 0 50px rgba(0,0,0,0.1)"></div>`;
-      
+
       // Attempt to auto-print after a small load delay
       setTimeout(() => {
-        try { printWindow.print(); } catch (e) {}
+        try { printWindow.print(); } catch (e) { }
       }, 1000);
     } else {
       // For other types, we have to let the browser handle it (which might download)
@@ -389,7 +431,7 @@ const ShopDashboard = () => {
           <div className="glass-panel p-1 border-primary/20 shadow-2xl shadow-primary/5 group transition-all">
             <div className="flex flex-col sm:flex-row items-stretch gap-1">
               <div className="flex-1 flex items-center px-6 py-4 gap-4"><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0 group-hover:rotate-12 transition-transform"><ShieldCheck size={20} /></div>
-              <input ref={masterOtpRef} type="text" placeholder="ENTER 6-DIGIT CODE FOR INSTANT RELEASE..." maxLength={6} value={masterOtp} onChange={(e) => { const val = e.target.value.replace(/\D/g, ""); setMasterOtp(val); if (val.length === 6) handleMasterRelease(val); }} className="w-full bg-transparent border-none text-lg font-bold tracking-[0.2em] outline-none" /></div>
+                <input ref={masterOtpRef} type="text" placeholder="ENTER 6-DIGIT CODE FOR INSTANT RELEASE..." maxLength={6} value={masterOtp} onChange={(e) => { const val = e.target.value.replace(/\D/g, ""); setMasterOtp(val); if (val.length === 6) handleMasterRelease(val); }} className="w-full bg-transparent border-none text-lg font-bold tracking-[0.2em] outline-none" /></div>
               <button onClick={() => handleMasterRelease(masterOtp)} disabled={masterOtp.length !== 6} className="bg-primary text-primary-foreground px-8 py-3 rounded-2xl font-bold transition-all hover:brightness-110 active:scale-95 disabled:opacity-30">RELEASE NOW</button>
             </div>
           </div>
@@ -424,12 +466,12 @@ const ShopDashboard = () => {
                     </div>
                   ) : (
                     <>
-                                            <button 
-                        onClick={() => setVerifyingId(job.id)} 
+                      <button
+                        onClick={() => setVerifyingId(job.id)}
                         disabled={receivingProgress[job.id] === undefined || (receivingProgress[job.id] < 100)}
                         className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
                       >
-                        <ShieldCheck size={18} /> 
+                        <ShieldCheck size={18} />
                         {receivingProgress[job.id] === undefined || receivingProgress[job.id] < 100 ? "STREAMING..." : "RELEASE PRINT"}
                       </button>
 

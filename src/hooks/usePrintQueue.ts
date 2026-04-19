@@ -32,25 +32,59 @@ export function usePrintQueue(shopId: string): { jobs: PrintJob[]; fetchJobs: ()
   useEffect(() => {
     fetchJobs();
 
-    // Subscribe to real-time changes for this shop
-    const channel = supabase
-      .channel(`print_jobs_${shopId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "print_jobs",
-          filter: `shop_id=eq.${shopId}`,
-        },
-        () => {
-          fetchJobs();
-        }
-      )
-      .subscribe();
+    let destroyed = false;
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const MAX_RETRIES = 5;
+    const getBackoff = (attempt: number) => Math.min(1000 * 2 ** attempt, 10000);
+
+    const subscribe = () => {
+      if (destroyed) return;
+
+      if (channel) {
+        supabase.removeChannel(channel);
+        channel = null;
+      }
+
+      channel = supabase
+        .channel(`print_jobs_${shopId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "print_jobs",
+            filter: `shop_id=eq.${shopId}`,
+          },
+          () => {
+            fetchJobs();
+          }
+        )
+        .subscribe((status) => {
+          if (destroyed) return;
+
+          if (status === "SUBSCRIBED") {
+            retryCount = 0;
+          }
+
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            if (retryCount < MAX_RETRIES) {
+              const delay = getBackoff(retryCount);
+              retryCount++;
+              retryTimer = setTimeout(subscribe, delay);
+            }
+          }
+        });
+    };
+
+    subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      destroyed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [shopId, fetchJobs]);
 
