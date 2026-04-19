@@ -59,166 +59,110 @@ const CustomerUpload = () => {
 
     try {
       const safeShopId = shopId.toLowerCase();
-      
-      // Step 1: Add to Database Queue (Metadata)
+      const storagePath = `${safeShopId}/${jobId}/${file.name}`;
+
+      // Step 1: Add job to DB queue (metadata, no file yet)
       await addJob(shopId, {
         id: jobId,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
-        fileDataUrl: "STREAMING_REALTIME", 
+        fileDataUrl: "UPLOADING",
         copies,
         code: verificationCode,
         timestamp: Date.now(),
         shopId,
       });
 
-      setStatus("Establishing Relay...");
-      const CHUNK_SIZE = 50 * 1024; // 50KB chunks (safer for mobile/Realtime limits)
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      // Step 2: Upload file to Supabase Storage (reliable HTTP upload)
+      setStatus("Uploading document...");
+      const { error: uploadError } = await supabase.storage
+        .from("vprint-uploads")
+        .upload(storagePath, file, {
+          cacheControl: "600", // 10 min cache (files are ephemeral)
+          upsert: true,
+        });
 
-      // --- PEER-TO-PEER FAST CHANNEL ---
-      const peer = new Peer({
-        config: {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "turn:openrelay.metered.ca:80", username: "openrelay", credential: "openrelay" }
-          ],
-        }
-      });
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
 
-      peer.on('error', (err) => {
-        console.warn("[P2P Warning] Signal path failed, falling back to Relay.", err);
-      });
+      // Step 3: Get public URL and update job record
+      const { data: urlData } = supabase.storage
+        .from("vprint-uploads")
+        .getPublicUrl(storagePath);
 
-      peer.on('open', () => {
-        const conn = peer.connect(`vprint-shop-${safeShopId}`);
-        conn.on('open', () => {
-          conn.send({
-            type: "FILE_TRANSFER",
-            jobId,
-            fileName: file.name,
-            fileType: file.type,
-            fileData: file
+      await supabase
+        .from("print_jobs")
+        .update({ file_data_url: urlData.publicUrl })
+        .eq("id", jobId);
+
+      setStatus("Document uploaded ✓");
+
+      // Step 4 (Optional): Try P2P fast-path in background
+      try {
+        const peer = new Peer({
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" },
+              { urls: "stun:stun1.l.google.com:19302" },
+              { urls: "turn:openrelay.metered.ca:80", username: "openrelay", credential: "openrelay" }
+            ],
+          }
+        });
+
+        peer.on('open', () => {
+          const conn = peer.connect(`vprint-shop-${safeShopId}`);
+          conn.on('open', () => {
+            conn.send({
+              type: "FILE_TRANSFER",
+              jobId,
+              fileName: file.name,
+              fileType: file.type,
+              fileData: file
+            });
+            setTimeout(() => peer.destroy(), 30000);
           });
-          // Keep it open for a bit to ensure delivery before destroying
-          setTimeout(() => peer.destroy(), 30000); 
+          conn.on('error', () => { /* P2P is best-effort */ });
         });
-        
-        conn.on('error', (err) => {
-          console.warn("[P2P Connection Error] Falling back to Relay.", err);
-        });
-      });
+        peer.on('error', () => { /* P2P is best-effort */ });
+      } catch {
+        // P2P is entirely optional — swallow errors
+      }
 
-      // Subscribe with retry — mobile networks frequently drop the first attempt
-      const MAX_RELAY_ATTEMPTS = 3;
-      let channel: ReturnType<typeof supabase.channel> | null = null;
-
-      for (let attempt = 0; attempt < MAX_RELAY_ATTEMPTS; attempt++) {
-        // Clean up previous failed channel before retrying
-        if (channel) {
-          supabase.removeChannel(channel);
-          channel = null;
-        }
-
-        channel = supabase.channel(`vprint-relay-${safeShopId}`, {
+      // Step 5 (Optional): Try Realtime broadcast notification
+      try {
+        const channel = supabase.channel(`vprint-relay-${safeShopId}`, {
           config: { broadcast: { self: false, ack: true } }
         });
 
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error("TIMED_OUT")), 15000);
-            channel!.subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                clearTimeout(timeout);
-                resolve();
-              }
-              if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                clearTimeout(timeout);
-                reject(new Error(status));
-              }
-            });
+        const subscribePromise = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("timeout")), 8000);
+          channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') { clearTimeout(timeout); resolve(); }
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { clearTimeout(timeout); reject(new Error(status)); }
           });
-          break; // Success — exit retry loop
-        } catch (subErr: any) {
-          console.warn(`[Relay] Attempt ${attempt + 1}/${MAX_RELAY_ATTEMPTS} failed:`, subErr.message);
-          if (attempt < MAX_RELAY_ATTEMPTS - 1) {
-            setStatus(`Relay retry ${attempt + 2}/${MAX_RELAY_ATTEMPTS}...`);
-            await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); // 1.5s, 3s backoff
-          } else {
-            throw new Error("Connection failed — station may be offline. Please try again.");
-          }
-        }
-      }
-
-      // If we get here, channel is guaranteed to be connected
-      const activeChannel = channel!;
-
-      // SYNC DELAY: Wait for Dashboard to see the DB record and subscribe
-      setStatus("Synchronizing with Station...");
-      await new Promise(r => setTimeout(r, 1500));
-
-      // Redundant Handshake
-      const handshake = { jobId, totalChunks, fileName: file.name };
-      await activeChannel.send({ type: "broadcast", event: "handshake", payload: handshake });
-      await new Promise(r => setTimeout(r, 300));
-      await activeChannel.send({ type: "broadcast", event: "handshake", payload: handshake });
-
-      setStatus(`Streaming: 0%`);
-      const CHUNK_THROTTLE = totalChunks > 50 ? 50 : 80; // Slightly higher throttle for reliability
-
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunkContent = file.slice(start, end);
-        const buffer = await chunkContent.arrayBuffer();
-        
-        // Stack-safe base64 conversion
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let j = 0; j < bytes.length; j++) {
-          binary += String.fromCharCode(bytes[j]);
-        }
-        const base64Chunk = btoa(binary);
-
-        const sendResult = await activeChannel.send({
-          type: "broadcast",
-          event: "chunk",
-          payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
         });
 
-        if (sendResult !== 'ok') {
-          // Retry logic
-          await new Promise(r => setTimeout(r, 500));
-          const retryResult = await activeChannel.send({
-            type: "broadcast",
-            event: "chunk",
-            payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
-          });
-          
-          if (retryResult !== 'ok') {
-            throw new Error(`Data stream interrupted (index ${i})`);
-          }
-        }
-        
-        const percent = Math.round(((i + 1) / totalChunks) * 100);
-        setStatus(`Streaming: ${percent}%`);
-        
-        // Prevent rate-limit drops
-        if (totalChunks > 2) await new Promise(r => setTimeout(r, CHUNK_THROTTLE));
+        await subscribePromise;
+        // Notify station that file is ready (lightweight signal, not the actual file)
+        await channel.send({
+          type: "broadcast",
+          event: "file_ready",
+          payload: { jobId, fileName: file.name, fileType: file.type, storageUrl: urlData.publicUrl }
+        });
+        setTimeout(() => supabase.removeChannel(channel), 5000);
+      } catch {
+        // Realtime notification is best-effort — station will pick it up via DB polling
+        console.log("[Relay] Notification skipped — station will poll from DB.");
       }
 
       setLoading(false);
       setStatus(null);
       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      
-      setTimeout(() => supabase.removeChannel(activeChannel), 15000);
     } catch (err: any) {
-      console.error("[Link Error]", err);
-      // Simplify error message for the user as requested
-      const errorMessage = err.message === "Connection timeout" ? "Connection timeout - Is the station dashboard open?" : err.message;
-      setStatus(`Connection failed: ${errorMessage}`);
+      console.error("[Upload Error]", err);
+      setStatus(`Upload failed: ${err.message}`);
       setLoading(false);
     }
   };

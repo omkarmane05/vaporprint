@@ -174,6 +174,23 @@ const ShopDashboard = () => {
         })
         .on("broadcast", { event: "handshake" }, handleHandshake)
         .on("broadcast", { event: "chunk" }, handleChunk)
+        .on("broadcast", { event: "file_ready" }, (payload: any) => {
+          const { jobId, fileName, fileType, storageUrl } = payload.payload;
+          // Download from Storage and cache locally for instant release
+          fetch(storageUrl)
+            .then(res => res.blob())
+            .then(blob => {
+              receivedFiles.current[jobId] = { blob, fileName, fileType };
+              setReceivingProgress(prev => ({ ...prev, [jobId]: 100 }));
+              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
+              toast.success(`Received: ${fileName}`);
+              fetchJobs(); // Refresh to get updated file_data_url
+            })
+            .catch(() => {
+              // Storage download failed — station will retry on print
+              fetchJobs();
+            });
+        })
         .subscribe((status) => {
           if (destroyed) return;
 
@@ -247,12 +264,6 @@ const ShopDashboard = () => {
       return;
     }
 
-    const jobData = receivedFiles.current[jobId];
-    if (!jobData || !jobData.blob || jobData.blob.size === 0) {
-      toast.error("File data missing or still streaming. Please wait or ask customer to re-upload.");
-      return;
-    }
-
     // PRE-EMPTIVE POPUP AVOIDANCE: Open window immediately on user-thread
     const printWindow = window.open("about:blank", "_blank");
     if (!printWindow) {
@@ -271,12 +282,41 @@ const ShopDashboard = () => {
       return;
     }
 
-    const url = URL.createObjectURL(jobData.blob);
+    // Try local blob first (P2P/realtime), then fall back to Storage URL
+    let fileBlob: Blob | null = null;
+    let fileName = job.fileName;
+    let fileType = job.fileType;
+
+    const localData = receivedFiles.current[jobId];
+    if (localData && localData.blob && localData.blob.size > 0) {
+      fileBlob = localData.blob;
+      fileName = localData.fileName;
+      fileType = localData.fileType;
+    } else if (job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME") {
+      // Download from Supabase Storage
+      try {
+        const res = await fetch(job.fileDataUrl);
+        if (!res.ok) throw new Error("Download failed");
+        fileBlob = await res.blob();
+      } catch (err) {
+        printWindow.close();
+        toast.error("Failed to download file from storage. Ask customer to re-upload.");
+        return;
+      }
+    }
+
+    if (!fileBlob || fileBlob.size === 0) {
+      printWindow.close();
+      toast.error("File data missing or still uploading. Please wait or ask customer to re-upload.");
+      return;
+    }
+
+    const url = URL.createObjectURL(fileBlob);
 
     // For PDFs and Images, we can try to render them directly for printing
-    if (jobData.fileType === "application/pdf" || jobData.fileType.startsWith("image/")) {
+    if (fileType === "application/pdf" || fileType.startsWith("image/")) {
       printWindow.document.body.style.margin = "0";
-      printWindow.document.body.innerHTML = jobData.fileType === "application/pdf"
+      printWindow.document.body.innerHTML = fileType === "application/pdf"
         ? `<embed src="${url}" type="application/pdf" width="100%" height="100%">`
         : `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><img src="${url}" style="max-width:100%;height:auto;box-shadow:0 0 50px rgba(0,0,0,0.1)"></div>`;
 
@@ -290,13 +330,23 @@ const ShopDashboard = () => {
     }
 
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
-    toast.success(`Released: ${jobData.fileName}`);
+    toast.success(`Released: ${fileName}`);
 
     // VAPORIZE: Revoke the local URL after 60 seconds to ensure it doesn't persist in memory
     setTimeout(() => {
       URL.revokeObjectURL(url);
       delete receivedFiles.current[jobId];
     }, 60000);
+
+    // Clean up storage file in background
+    if (job.fileDataUrl && job.fileDataUrl.includes("vprint-uploads")) {
+      try {
+        const pathMatch = job.fileDataUrl.split("/vprint-uploads/")[1];
+        if (pathMatch) {
+          supabase.storage.from("vprint-uploads").remove([decodeURIComponent(pathMatch)]);
+        }
+      } catch { /* best effort cleanup */ }
+    }
 
     setInputCode("");
     setVerifyingId(null);
@@ -451,33 +501,43 @@ const ShopDashboard = () => {
                       {receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100 && (
                         <span className="text-primary text-[10px] font-black animate-pulse">STREAMING: {receivingProgress[job.id]}%</span>
                       )}
-                      {receivingProgress[job.id] === 100 && (
+                      {(receivingProgress[job.id] === 100 || (job.fileDataUrl && job.fileDataUrl.startsWith("http"))) && (
                         <span className="text-success text-[10px] font-black">READY</span>
+                      )}
+                      {!receivingProgress[job.id] && job.fileDataUrl === "UPLOADING" && (
+                        <span className="text-amber-500 text-[10px] font-black animate-pulse">UPLOADING...</span>
                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {verifyingId === job.id ? (
-                    <div className="flex gap-3 items-center">
-                      <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
-                      <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
-                      <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => setVerifyingId(job.id)}
-                        disabled={receivingProgress[job.id] === undefined || (receivingProgress[job.id] < 100)}
-                        className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
-                      >
-                        <ShieldCheck size={18} />
-                        {receivingProgress[job.id] === undefined || receivingProgress[job.id] < 100 ? "STREAMING..." : "RELEASE PRINT"}
-                      </button>
+                  {(() => {
+                    const hasLocalBlob = receivingProgress[job.id] === 100;
+                    const hasStorageUrl = job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME" && job.fileDataUrl.startsWith("http");
+                    const isReady = hasLocalBlob || hasStorageUrl;
+                    const isStreaming = receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100;
 
-                      <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
-                    </>
-                  )}
+                    return verifyingId === job.id ? (
+                      <div className="flex gap-3 items-center">
+                        <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
+                        <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
+                        <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setVerifyingId(job.id)}
+                          disabled={!isReady}
+                          className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
+                        >
+                          <ShieldCheck size={18} />
+                          {isStreaming ? "STREAMING..." : isReady ? "RELEASE PRINT" : "UPLOADING..."}
+                        </button>
+
+                        <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
+                      </>
+                    );
+                  })()}
                 </div>
               </motion.div>
             ))}
