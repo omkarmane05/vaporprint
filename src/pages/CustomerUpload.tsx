@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -77,11 +76,6 @@ const CustomerUpload = () => {
       setStatus("Establishing Relay...");
       const CHUNK_SIZE = 50 * 1024; // 50KB chunks (safer for mobile/Realtime limits)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      const channel = supabase.channel(`vprint-relay-${safeShopId}`, {
-        config: {
-          broadcast: { self: false, ack: true }
-        }
-      });
 
       // --- PEER-TO-PEER FAST CHANNEL ---
       const peer = new Peer({
@@ -117,20 +111,49 @@ const CustomerUpload = () => {
         });
       });
 
-      // Subscribe and wait for connection before sending
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 20000);
-        channel.subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            clearTimeout(timeout);
-            resolve();
-          }
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            clearTimeout(timeout);
-            reject(new Error(`Connection failed (${status})`));
-          }
+      // Subscribe with retry — mobile networks frequently drop the first attempt
+      const MAX_RELAY_ATTEMPTS = 3;
+      let channel: ReturnType<typeof supabase.channel> | null = null;
+
+      for (let attempt = 0; attempt < MAX_RELAY_ATTEMPTS; attempt++) {
+        // Clean up previous failed channel before retrying
+        if (channel) {
+          supabase.removeChannel(channel);
+          channel = null;
+        }
+
+        channel = supabase.channel(`vprint-relay-${safeShopId}`, {
+          config: { broadcast: { self: false, ack: true } }
         });
-      });
+
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("TIMED_OUT")), 15000);
+            channel!.subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                clearTimeout(timeout);
+                resolve();
+              }
+              if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                clearTimeout(timeout);
+                reject(new Error(status));
+              }
+            });
+          });
+          break; // Success — exit retry loop
+        } catch (subErr: any) {
+          console.warn(`[Relay] Attempt ${attempt + 1}/${MAX_RELAY_ATTEMPTS} failed:`, subErr.message);
+          if (attempt < MAX_RELAY_ATTEMPTS - 1) {
+            setStatus(`Relay retry ${attempt + 2}/${MAX_RELAY_ATTEMPTS}...`);
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); // 1.5s, 3s backoff
+          } else {
+            throw new Error("Connection failed — station may be offline. Please try again.");
+          }
+        }
+      }
+
+      // If we get here, channel is guaranteed to be connected
+      const activeChannel = channel!;
 
       // SYNC DELAY: Wait for Dashboard to see the DB record and subscribe
       setStatus("Synchronizing with Station...");
@@ -138,9 +161,9 @@ const CustomerUpload = () => {
 
       // Redundant Handshake
       const handshake = { jobId, totalChunks, fileName: file.name };
-      await channel.send({ type: "broadcast", event: "handshake", payload: handshake });
+      await activeChannel.send({ type: "broadcast", event: "handshake", payload: handshake });
       await new Promise(r => setTimeout(r, 300));
-      await channel.send({ type: "broadcast", event: "handshake", payload: handshake });
+      await activeChannel.send({ type: "broadcast", event: "handshake", payload: handshake });
 
       setStatus(`Streaming: 0%`);
       const CHUNK_THROTTLE = totalChunks > 50 ? 50 : 80; // Slightly higher throttle for reliability
@@ -159,7 +182,7 @@ const CustomerUpload = () => {
         }
         const base64Chunk = btoa(binary);
 
-        const sendResult = await channel.send({
+        const sendResult = await activeChannel.send({
           type: "broadcast",
           event: "chunk",
           payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
@@ -168,7 +191,7 @@ const CustomerUpload = () => {
         if (sendResult !== 'ok') {
           // Retry logic
           await new Promise(r => setTimeout(r, 500));
-          const retryResult = await channel.send({
+          const retryResult = await activeChannel.send({
             type: "broadcast",
             event: "chunk",
             payload: { jobId, chunkIndex: i, totalChunks, data: base64Chunk, fileName: file.name, fileType: file.type }
@@ -190,7 +213,7 @@ const CustomerUpload = () => {
       setStatus(null);
       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
       
-      setTimeout(() => supabase.removeChannel(channel), 15000);
+      setTimeout(() => supabase.removeChannel(activeChannel), 15000);
     } catch (err: any) {
       console.error("[Link Error]", err);
       // Simplify error message for the user as requested
