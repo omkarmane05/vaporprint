@@ -3,7 +3,8 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut } from "lucide-react";
+import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut, Eye, X } from "lucide-react";
+import { type PrintJob } from "@/lib/printQueue";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
 import { verifyAndPrint, removeJob } from "@/lib/printQueue";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ const ShopDashboard = () => {
   const [inputCode, setInputCode] = useState("");
   const [masterOtp, setMasterOtp] = useState("");
   const masterOtpRef = useRef<HTMLInputElement>(null);
+  const [previewItem, setPreviewItem] = useState<{ job: PrintJob; url: string } | null>(null);
 
   // Auth states
   const [isVerifyingShop, setIsVerifyingShop] = useState(true);
@@ -256,6 +258,18 @@ const ShopDashboard = () => {
     return () => clearInterval(cleanupInterval);
   }, [isAuthenticated]);
 
+  // Polling fallback for "UPLOADING" jobs (Fixes mobile sync delays)
+  useEffect(() => {
+    const hasPendingJobs = jobs.some(j => j.fileDataUrl === "UPLOADING" || j.fileDataUrl === "STREAMING_REALTIME");
+    if (!hasPendingJobs) return;
+
+    const pollInterval = setInterval(() => {
+      fetchJobs();
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [jobs, fetchJobs]);
+
   const handlePrint = async (jobId: string, directCode?: string) => {
     const activeCode = directCode || inputCode;
 
@@ -350,6 +364,32 @@ const ShopDashboard = () => {
 
     setInputCode("");
     setVerifyingId(null);
+  };
+
+  const handlePreview = async (job: PrintJob) => {
+    let fileBlob: Blob | null = null;
+    const localData = receivedFiles.current[job.id];
+    
+    if (localData && localData.blob && localData.blob.size > 0) {
+      fileBlob = localData.blob;
+    } else if (job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME") {
+      try {
+        const res = await fetch(job.fileDataUrl);
+        if (!res.ok) throw new Error("Download failed");
+        fileBlob = await res.blob();
+      } catch (err) {
+        toast.error("Failed to load preview.");
+        return;
+      }
+    }
+
+    if (!fileBlob) {
+      toast.error("File still uploading...");
+      return;
+    }
+
+    const url = URL.createObjectURL(fileBlob);
+    setPreviewItem({ job, url });
   };
 
   const handleMasterRelease = async (code: string) => {
@@ -517,19 +557,28 @@ const ShopDashboard = () => {
                     const isReady = hasLocalBlob || hasStorageUrl;
                     const isStreaming = receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100;
 
-                    return verifyingId === job.id ? (
-                      <div className="flex gap-3 items-center">
-                        <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
-                        <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
-                        <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setVerifyingId(job.id)}
-                          disabled={!isReady}
-                          className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
-                        >
+                      return verifyingId === job.id ? (
+                        <div className="flex gap-3 items-center">
+                          <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
+                          <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
+                          <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handlePreview(job)}
+                            disabled={!isReady}
+                            className="bg-secondary text-muted-foreground h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:bg-secondary/70 disabled:opacity-30"
+                          >
+                            <Eye size={16} />
+                            Preview
+                          </button>
+                          
+                          <button
+                            onClick={() => setVerifyingId(job.id)}
+                            disabled={!isReady}
+                            className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
+                          >
                           <ShieldCheck size={18} />
                           {isStreaming ? "STREAMING..." : isReady ? "RELEASE PRINT" : "UPLOADING..."}
                         </button>
@@ -544,6 +593,66 @@ const ShopDashboard = () => {
           </AnimatePresence>
         </div>
       </main>
+
+      <AnimatePresence>
+        {previewItem && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              URL.revokeObjectURL(previewItem.url);
+              setPreviewItem(null);
+            }}
+            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden glass-panel !p-0 cursor-default"
+            >
+              <div className="p-4 flex items-center justify-between border-b border-border bg-background/50">
+                <h3 className="font-bold truncate pr-4">{previewItem.job.fileName}</h3>
+                <button
+                  onClick={() => {
+                    URL.revokeObjectURL(previewItem.url);
+                    setPreviewItem(null);
+                  }}
+                  className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-auto p-4 bg-muted/30 flex items-center justify-center">
+                {previewItem.job.fileType.startsWith("image/") ? (
+                  <img
+                    src={previewItem.url}
+                    alt={previewItem.job.fileName}
+                    className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                  />
+                ) : previewItem.job.fileType === "application/pdf" ? (
+                  <iframe
+                    src={previewItem.url}
+                    className="w-full h-[70vh] rounded-lg bg-white"
+                    title={previewItem.job.fileName}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4">
+                    <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
+                      <FileText size={32} />
+                    </div>
+                    <p className="font-medium text-lg">Preview not available</p>
+                    <p className="text-sm opacity-60">{previewItem.job.fileType}</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

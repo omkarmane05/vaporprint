@@ -92,10 +92,22 @@ const CustomerUpload = () => {
         .from("vprint-uploads")
         .getPublicUrl(storagePath);
 
-      await supabase
-        .from("print_jobs")
-        .update({ file_data_url: urlData.publicUrl })
-        .eq("id", jobId);
+      // Retry update if mobile network blips
+      let updated = false;
+      for (let i = 0; i < 3; i++) {
+        const { error: updateError } = await supabase
+          .from("print_jobs")
+          .update({ file_data_url: urlData.publicUrl })
+          .eq("id", jobId);
+        
+        if (!updateError) {
+          updated = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      if (!updated) throw new Error("Metadata sync failed. Refreshing...");
 
       setStatus("Document uploaded ✓");
 
