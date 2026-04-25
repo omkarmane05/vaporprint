@@ -6,6 +6,8 @@ import { addJob, generateId, generateCode } from "@/lib/printQueue";
 import { supabase } from "@/integrations/supabase/client";
 import { Peer } from "peerjs";
 import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument } from 'pdf-lib';
+import { toast } from "sonner";
 
 // Use a more stable worker URL
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -46,6 +48,55 @@ const CustomerUpload = () => {
     fetchShop();
   }, [shopId]);
 
+  const updatePreviews = async (f: File, range: string, max: number) => {
+    setIsPreviewLoading(true);
+    try {
+      const arrayBuffer = await f.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      const selectedPages = range === "All" 
+        ? Array.from({ length: Math.min(max, 3) }, (_, i) => i + 1)
+        : parsePageRange(range, max).slice(0, 3); // Preview first 3 selected
+
+      const previewUrls: string[] = [];
+      for (const pageNum of selectedPages) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 0.4 });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (context) {
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          await page.render({ canvasContext: context, viewport }).promise;
+          previewUrls.push(canvas.toDataURL('image/webp', 0.6));
+        }
+      }
+      setPreviews(previewUrls);
+    } catch (err) {
+      console.error("Preview update failed:", err);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  const parsePageRange = (rangeStr: string, maxPages: number): number[] => {
+    if (rangeStr === "All") return Array.from({ length: maxPages }, (_, i) => i + 1);
+    const pages = new Set<number>();
+    const parts = rangeStr.split(',').map(p => p.trim());
+    for (const part of parts) {
+      if (part.includes('-')) {
+        const [start, end] = part.split('-').map(Number);
+        if (!isNaN(start) && !isNaN(end)) {
+          for (let i = Math.max(1, start); i <= Math.min(end, maxPages); i++) pages.add(i);
+        }
+      } else {
+        const page = Number(part);
+        if (!isNaN(page) && page >= 1 && page <= maxPages) pages.add(page);
+      }
+    }
+    return Array.from(pages).sort((a, b) => a - b);
+  };
+
   if (!shopId) return null;
 
   const handleFile = async (f: File) => {
@@ -63,32 +114,9 @@ const CustomerUpload = () => {
       setStatus("Analyzing PDF...");
       try {
         const arrayBuffer = await f.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ 
-          data: arrayBuffer,
-          useWorkerFetch: true,
-          isEvalSupported: false 
-        });
-        
-        const pdf = await loadingTask.promise;
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         setNumPages(pdf.numPages);
-
-        const previewUrls: string[] = [];
-        const pagesToPreview = Math.min(pdf.numPages, 3);
-        
-        for (let i = 1; i <= pagesToPreview; i++) {
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 0.4 });
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          
-          if (context) {
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport }).promise;
-            previewUrls.push(canvas.toDataURL('image/webp', 0.6));
-          }
-        }
-        setPreviews(previewUrls);
+        await updatePreviews(f, "All", pdf.numPages);
         setStatus(null);
       } catch (err) {
         console.error("PDF parsing failed:", err);
@@ -109,6 +137,24 @@ const CustomerUpload = () => {
     setCode(verificationCode); // Show code immediately
 
     try {
+      let finalFile: File | Blob = file;
+      
+      // Step 0: Extract pages if PDF and range is selected
+      if (file.type === "application/pdf" && pageRange !== "All" && numPages) {
+        setStatus("Extracting pages...");
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(arrayBuffer);
+        const newPdfDoc = await PDFDocument.create();
+        const pageIndices = parsePageRange(pageRange, numPages).map(p => p - 1);
+        
+        if (pageIndices.length > 0) {
+          const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
+          copiedPages.forEach(p => newPdfDoc.addPage(p));
+          const pdfBytes = await newPdfDoc.save();
+          finalFile = new Blob([pdfBytes], { type: "application/pdf" });
+        }
+      }
+
       const safeShopId = shopId.toLowerCase();
       const storagePath = `${safeShopId}/${jobId}/${file.name}`;
 
@@ -117,7 +163,7 @@ const CustomerUpload = () => {
         id: jobId,
         fileName: file.name,
         fileType: file.type,
-        fileSize: file.size,
+        fileSize: finalFile.size,
         fileDataUrl: "UPLOADING",
         copies,
         code: verificationCode,
@@ -130,7 +176,7 @@ const CustomerUpload = () => {
       setStatus("Uploading document...");
       const { error: uploadError } = await supabase.storage
         .from("vprint-uploads")
-        .upload(storagePath, file, {
+        .upload(storagePath, finalFile, {
           cacheControl: "600", // 10 min cache (files are ephemeral)
           upsert: true,
         });
@@ -315,6 +361,7 @@ const CustomerUpload = () => {
                       placeholder="e.g. 1-5, 8, 11-13" 
                       value={pageRange === "All" ? "" : pageRange}
                       onChange={(e) => setPageRange(e.target.value)}
+                      onBlur={() => file && numPages && updatePreviews(file, pageRange, numPages)}
                       className={`flex-[2] bg-secondary/50 border border-primary/10 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 ring-primary/20 transition-all ${pageRange !== "All" ? "text-primary" : ""}`}
                       onClick={() => pageRange === "All" && setPageRange("")}
                     />
