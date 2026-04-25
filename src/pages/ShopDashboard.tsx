@@ -536,9 +536,15 @@ const ShopDashboard = () => {
                   <div className="w-16 h-16 rounded-2xl pastel-lavender flex items-center justify-center border border-primary/10 flex-shrink-0"><FileText className="text-primary/60" size={28} /></div>
                   <div>
                     <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
-                    <div className="flex items-center gap-2">
-                      <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
-                      {receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100 && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
+                        {job.pageRange && (
+                          <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md">Pages: {job.pageRange}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100 && (
                         <span className="text-primary text-[10px] font-black animate-pulse">STREAMING: {receivingProgress[job.id]}%</span>
                       )}
                       {(receivingProgress[job.id] === 100 || (job.fileDataUrl && job.fileDataUrl.startsWith("http"))) && (

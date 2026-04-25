@@ -10,6 +10,7 @@ export interface PrintJob {
   code: string;
   timestamp: number;
   shopId: string;
+  pageRange?: string;
 }
 
 function rowToJob(row: any): PrintJob {
@@ -23,6 +24,7 @@ function rowToJob(row: any): PrintJob {
     code: row.code,
     timestamp: new Date(row.created_at).getTime(),
     shopId: row.shop_id,
+    pageRange: row.page_range,
   };
 }
 
@@ -48,6 +50,7 @@ export async function addJob(shopId: string, job: PrintJob) {
     file_data_url: job.fileDataUrl,
     copies: job.copies,
     code: job.code,
+    page_range: job.pageRange,
   });
   if (error) {
     throw error;

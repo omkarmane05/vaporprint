@@ -5,6 +5,10 @@ import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2 } from "lucide-react
 import { addJob, generateId, generateCode } from "@/lib/printQueue";
 import { supabase } from "@/integrations/supabase/client";
 import { Peer } from "peerjs";
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Initialize PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const CustomerUpload = () => {
   const { shopId } = useParams<{ shopId: string }>();
@@ -16,6 +20,10 @@ const CustomerUpload = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [pageRange, setPageRange] = useState("All");
+  const [numPages, setNumPages] = useState<number | null>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,12 +48,47 @@ const CustomerUpload = () => {
 
   if (!shopId) return null;
 
-  const handleFile = (f: File) => {
+  const handleFile = async (f: File) => {
     if (f.size > 50 * 1024 * 1024) {
       alert("File too large. Max 50MB for peer transfer.");
       return;
     }
     setFile(f);
+    setPageRange("All");
+    setPreviews([]);
+    setNumPages(null);
+
+    if (f.type === "application/pdf") {
+      setIsPreviewLoading(true);
+      try {
+        const arrayBuffer = await f.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        setNumPages(pdf.numPages);
+
+        const previewUrls: string[] = [];
+        // Generate previews for the first 3 pages (or fewer if document is shorter)
+        const pagesToPreview = Math.min(pdf.numPages, 3);
+        
+        for (let i = 1; i <= pagesToPreview; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 0.5 });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (context) {
+            await page.render({ canvasContext: context, viewport }).promise;
+            previewUrls.push(canvas.toDataURL());
+          }
+        }
+        setPreviews(previewUrls);
+      } catch (err) {
+        console.error("PDF parsing failed:", err);
+      } finally {
+        setIsPreviewLoading(false);
+      }
+    }
   };
 
   const handleUpload = async () => {
@@ -72,6 +115,7 @@ const CustomerUpload = () => {
         code: verificationCode,
         timestamp: Date.now(),
         shopId,
+        pageRange: pageRange === "All" ? `1-${numPages || 1}` : pageRange,
       });
 
       // Step 2: Upload file to Supabase Storage (reliable HTTP upload)
@@ -232,6 +276,52 @@ const CustomerUpload = () => {
             <input ref={inputRef} type="file" className="hidden" aria-label="Upload document" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
             <div className="p-16 text-center"><div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-6"><Upload className="text-muted-foreground/60" size={24} /></div><p className="text-sm font-medium">{file ? <span className="text-primary">{file.name}</span> : <span className="text-muted-foreground font-light">Select document</span>}</p></div>
           </div>
+
+          {file && numPages && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-4">
+              <div className="glass-panel p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Page Range</span>
+                  <span className="text-xs font-bold text-primary">{numPages} Pages Total</span>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setPageRange("All")} 
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${pageRange === "All" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
+                  >
+                    ALL
+                  </button>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 1-5, 8, 11-13" 
+                    value={pageRange === "All" ? "" : pageRange}
+                    onChange={(e) => setPageRange(e.target.value)}
+                    className={`flex-[2] bg-secondary/50 border border-primary/10 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 ring-primary/20 transition-all ${pageRange !== "All" ? "text-primary" : ""}`}
+                    onClick={() => pageRange === "All" && setPageRange("")}
+                  />
+                </div>
+
+                {previews.length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide pt-2">
+                    {previews.map((src, i) => (
+                      <div key={i} className="flex-shrink-0 w-24 aspect-[3/4] rounded-lg border border-primary/10 overflow-hidden bg-white shadow-sm">
+                        <img src={src} alt={`Page ${i + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute top-1 left-1 bg-primary/80 text-[8px] text-white px-1.5 py-0.5 rounded-md font-bold">P{i + 1}</div>
+                      </div>
+                    ))}
+                    {numPages > previews.length && (
+                      <div className="flex-shrink-0 w-24 aspect-[3/4] rounded-lg border border-dashed border-primary/20 flex flex-col items-center justify-center bg-secondary/30 text-muted-foreground">
+                        <span className="text-[10px] font-bold">+{numPages - previews.length}</span>
+                        <span className="text-[8px] uppercase font-black">More</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
           <div className="glass-panel p-5 flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Quantity</span><div className="flex items-center gap-4"><button onClick={() => setCopies(Math.max(1, copies - 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">-</button><span className="font-bold text-xl">{copies}</span><button onClick={() => setCopies(Math.min(50, copies + 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">+</button></div></div>
           <button onClick={handleUpload} disabled={!file || loading} className="w-full bg-primary text-primary-foreground h-16 rounded-[1.5rem] font-bold text-base transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3">
             {loading && <Loader2 className="animate-spin" size={20} />}

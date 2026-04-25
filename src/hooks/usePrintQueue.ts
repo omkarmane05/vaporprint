@@ -13,6 +13,7 @@ function rowToJob(row: any): PrintJob {
     code: row.code,
     timestamp: new Date(row.created_at).getTime(),
     shopId: row.shop_id,
+    pageRange: row.page_range,
   };
 }
 
@@ -23,7 +24,7 @@ export function usePrintQueue(shopId: string): { jobs: PrintJob[]; fetchJobs: ()
     if (!shopId) return;
     const { data } = await supabase
       .from("print_jobs")
-      .select("id, file_name, file_type, file_size, file_data_url, copies, code, created_at, shop_id")
+      .select("id, file_name, file_type, file_size, file_data_url, copies, code, created_at, shop_id, page_range")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false });
     setJobs((data || []).map(rowToJob));
