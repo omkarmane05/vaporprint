@@ -556,6 +556,7 @@ const ShopDashboard = () => {
                     </div>
                   </div>
                 </div>
+              </div>
                 <div className="flex items-center gap-3">
                   {(() => {
                     const hasLocalBlob = receivingProgress[job.id] === 100;
