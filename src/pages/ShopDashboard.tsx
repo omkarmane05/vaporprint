@@ -1,9 +1,12 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut, Eye, X } from "lucide-react";
+import { FileText, Trash2, Search, Printer, ShieldCheck, Eye, X, Loader2, Download, Clock, Shield, Radio, Mail, LogOut, Copy } from "lucide-react";
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Use stable worker URL for shop side too
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 import { type PrintJob } from "@/lib/printQueue";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
 import { verifyAndPrint, removeJob } from "@/lib/printQueue";
@@ -641,11 +644,7 @@ const ShopDashboard = () => {
                     className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
                   />
                 ) : previewItem.job.fileType === "application/pdf" ? (
-                  <iframe
-                    src={previewItem.url}
-                    className="w-full h-[70vh] rounded-lg bg-white"
-                    title={previewItem.job.fileName}
-                  />
+                  <SecurePDFPreview url={previewItem.url} />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4">
                     <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
@@ -660,6 +659,55 @@ const ShopDashboard = () => {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+};
+
+const SecurePDFPreview = ({ url }: { url: string }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const renderPDF = async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument(url);
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const context = canvas.getContext('2d');
+        if (!context) return;
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: context, viewport }).promise;
+        setLoading(false);
+      } catch (err) {
+        console.error("PDF render failed:", err);
+        setLoading(false);
+      }
+    };
+    renderPDF();
+  }, [url]);
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center bg-white rounded-lg overflow-hidden select-none">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10">
+          <Loader2 className="animate-spin text-primary" size={32} />
+        </div>
+      )}
+      <canvas 
+        ref={canvasRef} 
+        className="max-w-full max-h-[70vh] object-contain shadow-2xl"
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      <div className="absolute bottom-4 right-4 bg-primary/20 backdrop-blur-md px-3 py-1 rounded-full border border-primary/20 pointer-events-none">
+        <span className="text-[10px] font-black text-primary tracking-widest uppercase">Secure Preview • Page 1</span>
+      </div>
     </div>
   );
 };
