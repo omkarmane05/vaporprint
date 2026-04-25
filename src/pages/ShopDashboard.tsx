@@ -2,16 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, Trash2, Search, Printer, ShieldCheck, Eye, X, Loader2, Download, Clock, Shield, Radio, Mail, LogOut, Copy } from "lucide-react";
+import { FileText, Trash2, Search, Printer, ShieldCheck, Eye, X, Loader2, Download, Clock, Shield, Radio, Mail, LogOut, Copy, Lock } from "lucide-react";
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Use stable worker URL for shop side too
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
 import { type PrintJob } from "@/lib/printQueue";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
 import { verifyAndPrint, removeJob } from "@/lib/printQueue";
 import { toast } from "sonner";
-import { Peer } from "peerjs";
 import { supabase } from "@/integrations/supabase/client";
 
 const ShopDashboard = () => {
@@ -31,9 +31,6 @@ const ShopDashboard = () => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [receivingProgress, setReceivingProgress] = useState<Record<string, number>>({});
-  const receivedFiles = useRef<Record<string, { blob: Blob; fileName: string; fileType: string }>>({});
-  const chunkBuffer = useRef<Map<string, string[]>>(new Map());
 
   useEffect(() => {
     checkShopAndAuth();
@@ -41,9 +38,7 @@ const ShopDashboard = () => {
 
   const checkShopAndAuth = async () => {
     if (!shopId) return;
-
     try {
-      // Fetch shop data (no password column — it's been removed)
       const { data, error } = await supabase
         .from("shops")
         .select("name, status, owner_id")
@@ -54,10 +49,8 @@ const ShopDashboard = () => {
         setIsVerifyingShop(false);
         return;
       }
-
       setShopData(data);
 
-      // Check existing Supabase Auth session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const isOwner = data.owner_id === session.user.id;
@@ -73,333 +66,84 @@ const ShopDashboard = () => {
     }
   };
 
-  // PeerJS + Relay connection (Starts early, doesn't reset on auth change)
+  // Secure Notification Listener
   useEffect(() => {
-    if (!shopId) return;
-
+    if (!shopId || !isAuthenticated) return;
     const safeShopId = shopId.toLowerCase();
-    const peerId = `vprint-shop-${safeShopId}`;
-    let destroyed = false;
-    let retryCount = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let relayChannel: ReturnType<typeof supabase.channel> | null = null;
-
-    const MAX_RETRIES = 5;
-    const getBackoff = (attempt: number) => Math.min(1000 * 2 ** attempt, 10000);
-
-    const peer = new Peer(peerId, {
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelay",
-            credential: "openrelay"
-          },
-        ],
-      },
-    });
-
-    peer.on("error", (err) => {
-      console.error("[P2P Station Error]", err);
-      if (err.type === 'id-taken') {
-        toast.error("Station ID collision: Is the dashboard open in another tab? P2P disabled for this session.");
-      }
-    });
-
-    // --- Relay channel handler callbacks (stable across reconnects) ---
-    const handleHandshake = (payload: any) => {
-      const { jobId, totalChunks } = payload.payload;
-      if (!chunkBuffer.current.has(jobId)) {
-        chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
-        chunkBuffer.current.set(jobId + "_count", 0);
-        setReceivingProgress(prev => ({ ...prev, [jobId]: 0 }));
-        fetchJobs(); // AUTONOMOUS SYNC
-      }
-    };
-
-    const handleChunk = (payload: any) => {
-      const { jobId, chunkIndex, totalChunks, data, fileName, fileType } = payload.payload;
-
-      if (!chunkBuffer.current.has(jobId)) {
-        chunkBuffer.current.set(jobId, new Array(totalChunks).fill(null));
-        chunkBuffer.current.set(jobId + "_count", 0);
-        fetchJobs(); // AUTONOMOUS SYNC (if handshake missed)
-      }
-
-      const chunks = chunkBuffer.current.get(jobId)!;
-
-      // Only process if we haven't received this chunk yet
-      if (chunks[chunkIndex] === null) {
-        chunks[chunkIndex] = data;
-
-        const currentCount = (chunkBuffer.current.get(jobId + "_count") as number) + 1;
-        chunkBuffer.current.set(jobId + "_count", currentCount);
-
-        const progress = Math.round((currentCount / totalChunks) * 100);
-        setReceivingProgress(prev => ({ ...prev, [jobId]: progress }));
-
-        if (currentCount === totalChunks) {
-          const byteArrays = chunks.map(base64 => {
-            const byteCharacters = atob(base64);
-            const byteNumbers = new Uint8Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            return byteNumbers;
-          });
-
-          receivedFiles.current[jobId] = {
-            blob: new Blob(byteArrays, { type: fileType }),
-            fileName,
-            fileType,
-          };
-          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
-          toast.success(`Received: ${fileName}`);
-          chunkBuffer.current.delete(jobId);
-        }
-      }
-    };
-
-    // --- Subscribe with auto-retry ---
-    const subscribeRelay = () => {
-      if (destroyed) return;
-
-      // Clean up previous channel if it exists
-      if (relayChannel) {
-        supabase.removeChannel(relayChannel);
-        relayChannel = null;
-      }
-
-      relayChannel = supabase
-        .channel(`vprint-relay-${safeShopId}`, {
-          config: { broadcast: { ack: true } },
-        })
-        .on("broadcast", { event: "handshake" }, handleHandshake)
-        .on("broadcast", { event: "chunk" }, handleChunk)
-        .on("broadcast", { event: "file_ready" }, (payload: any) => {
-          const { jobId, fileName, fileType, storageUrl } = payload.payload;
-          // Download from Storage and cache locally for instant release
-          fetch(storageUrl)
-            .then(res => res.blob())
-            .then(blob => {
-              receivedFiles.current[jobId] = { blob, fileName, fileType };
-              setReceivingProgress(prev => ({ ...prev, [jobId]: 100 }));
-              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
-              toast.success(`Received: ${fileName}`);
-              fetchJobs(); // Refresh to get updated file_data_url
-            })
-            .catch(() => {
-              // Storage download failed — station will retry on print
-              fetchJobs();
-            });
-        })
-        .subscribe((status) => {
-          if (destroyed) return;
-
-          if (status === "SUBSCRIBED") {
-            console.log("Relay Link Established:", safeShopId);
-            if (retryCount > 0) {
-              toast.success("Relay reconnected successfully.");
-            }
-            retryCount = 0; // Reset on success
-          }
-
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            console.error("Relay Link Failed:", status, `(attempt ${retryCount + 1}/${MAX_RETRIES})`);
-
-            if (retryCount < MAX_RETRIES) {
-              const delay = getBackoff(retryCount);
-              retryCount++;
-              console.log(`Relay retry #${retryCount} in ${delay}ms...`);
-              retryTimer = setTimeout(subscribeRelay, delay);
-            } else {
-              toast.error("Realtime network error. Please refresh the dashboard.");
-            }
-          }
-        });
-    };
-
-    subscribeRelay();
-
-    peer.on("connection", (conn) => {
-      conn.on("data", (data: any) => {
-        if (data.type === "FILE_TRANSFER") {
-          const blob = data.fileData instanceof Blob ? data.fileData : new Blob([data.fileData], { type: data.fileType });
-          receivedFiles.current[data.jobId] = {
-            blob,
-            fileName: data.fileName,
-            fileType: data.fileType,
-          };
-          setReceivingProgress(prev => ({ ...prev, [data.jobId]: 100 }));
-          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
-          toast.success(`New file received via P2P: ${data.fileName}`);
-        }
-      });
-    });
+    
+    const channel = supabase.channel(`vprint-notify-${safeShopId}`);
+    channel
+      .on("broadcast", { event: "new-job" }, () => {
+        console.log("[Signal] New job notification");
+        fetchJobs();
+      })
+      .subscribe();
 
     return () => {
-      destroyed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      peer.destroy();
-      if (relayChannel) supabase.removeChannel(relayChannel);
+      supabase.removeChannel(channel);
     };
-  }, [shopId]);
+  }, [shopId, isAuthenticated]);
 
-  // Cleanup interval effect (Isolated from connection logic)
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const cleanupInterval = setInterval(async () => {
-      try {
-        await supabase.rpc("cleanup_expired_jobs");
-      } catch {
-        // Silent fail
-      }
-    }, 30000);
-    return () => clearInterval(cleanupInterval);
-  }, [isAuthenticated]);
-
-  // Polling fallback for "UPLOADING" jobs (Fixes mobile sync delays)
-  useEffect(() => {
-    const hasPendingJobs = jobs.some(j => j.fileDataUrl === "UPLOADING" || j.fileDataUrl === "STREAMING_REALTIME");
-    if (!hasPendingJobs) return;
-
-    const pollInterval = setInterval(() => {
-      fetchJobs();
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
-  }, [jobs, fetchJobs]);
+  const handlePreview = async (job: PrintJob) => {
+    try {
+      setPreviewItem({ job, url: "" }); 
+      const safeShopId = job.shopId.toLowerCase();
+      const storagePath = `${safeShopId}/${job.id}/${job.fileName}`;
+      
+      const { data, error } = await supabase.storage
+        .from("vprint-uploads")
+        .createSignedUrl(storagePath, 300);
+      
+      if (error) throw error;
+      setPreviewItem({ job, url: data.signedUrl });
+    } catch (err) {
+      console.error("Preview failed:", err);
+      toast.error("Security access denied.");
+      setPreviewItem(null);
+    }
+  };
 
   const handlePrint = async (jobId: string, directCode?: string) => {
     const activeCode = directCode || inputCode;
-
     if (!activeCode || activeCode.length < 4) {
-      toast.error("Please enter the verification code.");
+      toast.error("Enter verification code.");
       return;
     }
 
-    // PRE-EMPTIVE POPUP AVOIDANCE: Open window immediately on user-thread
-    const printWindow = window.open("about:blank", "_blank");
-    if (!printWindow) {
-      toast.error("Popup blocked! Please allow popups for this station.");
-      return;
-    }
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
 
-    // Set a loading state in the popup
-    printWindow.document.write("<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#666'><h3>Vaporizing into document format...</h3></body></html>");
-
-    const job = await verifyAndPrint(shopId || "", jobId, activeCode);
-
-    if (!job) {
-      printWindow.close();
-      toast.error("Invalid verification code.");
-      return;
-    }
-
-    // Try local blob first (P2P/realtime), then fall back to Storage URL
-    let fileBlob: Blob | null = null;
-    let fileName = job.fileName;
-    let fileType = job.fileType;
-
-    const localData = receivedFiles.current[jobId];
-    if (localData && localData.blob && localData.blob.size > 0) {
-      fileBlob = localData.blob;
-      fileName = localData.fileName;
-      fileType = localData.fileType;
-    } else if (job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME") {
-      // Download from Supabase Storage
-      try {
-        const res = await fetch(job.fileDataUrl);
-        if (!res.ok) throw new Error("Download failed");
-        fileBlob = await res.blob();
-      } catch (err) {
-        printWindow.close();
-        toast.error("Failed to download file from storage. Ask customer to re-upload.");
-        return;
+    try {
+      const success = await verifyAndPrint(shopId || "", jobId, activeCode);
+      if (success) {
+        toast.success("Identity Verified!");
+        const safeShopId = job.shopId.toLowerCase();
+        const storagePath = `${safeShopId}/${job.id}/${job.fileName}`;
+        
+        const { data, error } = await supabase.storage
+          .from("vprint-uploads")
+          .createSignedUrl(storagePath, 60);
+          
+        if (error) throw error;
+        window.open(data.signedUrl, "_blank");
+        setTimeout(() => fetchJobs(), 2000);
+      } else {
+        toast.error("Invalid verification code.");
       }
+    } catch (err) {
+      console.error("Print error:", err);
+      toast.error("Security error during release.");
+    } finally {
+      setInputCode("");
+      setVerifyingId(null);
     }
-
-    if (!fileBlob || fileBlob.size === 0) {
-      printWindow.close();
-      toast.error("File data missing or still uploading. Please wait or ask customer to re-upload.");
-      return;
-    }
-
-    const url = URL.createObjectURL(fileBlob);
-
-    // For PDFs and Images, we can try to render them directly for printing
-    if (fileType === "application/pdf" || fileType.startsWith("image/")) {
-      printWindow.document.body.style.margin = "0";
-      printWindow.document.body.innerHTML = fileType === "application/pdf"
-        ? `<embed src="${url}" type="application/pdf" width="100%" height="100%">`
-        : `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><img src="${url}" style="max-width:100%;height:auto;box-shadow:0 0 50px rgba(0,0,0,0.1)"></div>`;
-
-      // Attempt to auto-print after a small load delay
-      setTimeout(() => {
-        try { printWindow.print(); } catch (e) { }
-      }, 1000);
-    } else {
-      // For other types, we have to let the browser handle it (which might download)
-      printWindow.location.href = url;
-    }
-
-    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
-    toast.success(`Released: ${fileName}`);
-
-    // VAPORIZE: Revoke the local URL after 60 seconds to ensure it doesn't persist in memory
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      delete receivedFiles.current[jobId];
-    }, 60000);
-
-    // Clean up storage file in background
-    if (job.fileDataUrl && job.fileDataUrl.includes("vprint-uploads")) {
-      try {
-        const pathMatch = job.fileDataUrl.split("/vprint-uploads/")[1];
-        if (pathMatch) {
-          supabase.storage.from("vprint-uploads").remove([decodeURIComponent(pathMatch)]);
-        }
-      } catch { /* best effort cleanup */ }
-    }
-
-    setInputCode("");
-    setVerifyingId(null);
-  };
-
-  const handlePreview = async (job: PrintJob) => {
-    let fileBlob: Blob | null = null;
-    const localData = receivedFiles.current[job.id];
-    
-    if (localData && localData.blob && localData.blob.size > 0) {
-      fileBlob = localData.blob;
-    } else if (job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME") {
-      try {
-        const res = await fetch(job.fileDataUrl);
-        if (!res.ok) throw new Error("Download failed");
-        fileBlob = await res.blob();
-      } catch (err) {
-        toast.error("Failed to load preview.");
-        return;
-      }
-    }
-
-    if (!fileBlob) {
-      toast.error("File still uploading...");
-      return;
-    }
-
-    const url = URL.createObjectURL(fileBlob);
-    setPreviewItem({ job, url });
   };
 
   const handleMasterRelease = async (code: string) => {
     if (code.length !== 6) return;
     const matchingJob = jobs.find(j => j.code === code);
     if (!matchingJob) {
-      toast.error("Code not found in queue.");
+      toast.error("Code not found.");
       setMasterOtp("");
       return;
     }
@@ -410,32 +154,25 @@ const ShopDashboard = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setIsAuthenticated(false);
-    toast.success("Station Secured (Logged Out)");
+    toast.success("Station Secured");
   };
 
   const handleLogin = async () => {
     if (!shopData || !shopId || !loginEmail || !loginPassword) return;
     setIsLoggingIn(true);
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword,
       });
-
       if (error) throw error;
-
-      // Verify this user owns the shop or is admin
       const isOwner = shopData.owner_id === data.user.id;
       const isAdmin = data.user.app_metadata?.role === "admin";
-
       if (!isOwner && !isAdmin) {
-        toast.error("Access denied. You don't own this station.");
+        toast.error("Access denied.");
         await supabase.auth.signOut();
-        setIsLoggingIn(false);
         return;
       }
-
       setIsAuthenticated(true);
       toast.success("Station Unlocked");
     } catch (err: any) {
@@ -458,22 +195,8 @@ const ShopDashboard = () => {
             <p className="text-muted-foreground text-sm font-light">Station Secured • Sign In</p>
           </div>
           <div className="space-y-4">
-            <input
-              type="email"
-              placeholder="Email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all"
-              autoFocus
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all"
-            />
+            <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all" autoFocus />
+            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full bg-secondary/50 border border-primary/10 rounded-2xl px-6 h-14 font-bold text-lg text-center outline-none focus:ring-4 ring-primary/5 transition-all" />
           </div>
           <button onClick={handleLogin} disabled={isLoggingIn || !loginEmail || !loginPassword} className="w-full bg-primary text-primary-foreground h-14 rounded-2xl font-bold transition-all hover:brightness-105 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-30">
             {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : <Shield size={20} />}
@@ -499,18 +222,8 @@ const ShopDashboard = () => {
           <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-6">Network Health</h2>
           <div className="flex items-center gap-3 text-success text-sm font-bold mb-3"><div className="w-2.5 h-2.5 rounded-full bg-success animate-pulse" />PROTOCOL ACTIVE</div>
           <p className="text-xs text-muted-foreground/80 leading-relaxed mb-6 italic">Secure session active. Auto-purge enabled.</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all mb-3 uppercase"
-          >
-            Re-Sync Node
-          </button>
-          <button
-            onClick={handleLogout}
-            className="w-full py-3 bg-destructive/10 text-destructive rounded-xl text-[10px] font-bold tracking-widest hover:bg-destructive/20 transition-all uppercase flex items-center justify-center gap-2"
-          >
-            <LogOut size={12} /> SECURE LOGOUT
-          </button>
+          <button onClick={() => window.location.reload()} className="w-full py-3 bg-secondary/50 rounded-xl text-[10px] font-bold tracking-widest hover:bg-secondary transition-all mb-3 uppercase">Re-Sync Node</button>
+          <button onClick={handleLogout} className="w-full py-3 bg-destructive/10 text-destructive rounded-xl text-[10px] font-bold tracking-widest hover:bg-destructive/20 transition-all uppercase flex items-center justify-center gap-2"><LogOut size={12} /> SECURE LOGOUT</button>
         </div>
       </aside>
 
@@ -539,64 +252,26 @@ const ShopDashboard = () => {
                   <div className="w-16 h-16 rounded-2xl pastel-lavender flex items-center justify-center border border-primary/10 flex-shrink-0"><FileText className="text-primary/60" size={28} /></div>
                   <div>
                     <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
-                        {job.pageRange && (
-                          <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md">Pages: {job.pageRange}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100 && (
-                        <span className="text-primary text-[10px] font-black animate-pulse">STREAMING: {receivingProgress[job.id]}%</span>
-                      )}
-                      {(receivingProgress[job.id] === 100 || (job.fileDataUrl && job.fileDataUrl.startsWith("http"))) && (
-                        <span className="text-success text-[10px] font-black">READY</span>
-                      )}
-                      {!receivingProgress[job.id] && job.fileDataUrl === "UPLOADING" && (
-                        <span className="text-amber-500 text-[10px] font-black animate-pulse">UPLOADING...</span>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
+                      {job.pageRange && <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md">Pages: {job.pageRange}</span>}
                     </div>
                   </div>
                 </div>
-              </div>
                 <div className="flex items-center gap-3">
-                  {(() => {
-                    const hasLocalBlob = receivingProgress[job.id] === 100;
-                    const hasStorageUrl = job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME" && job.fileDataUrl.startsWith("http");
-                    const isReady = hasLocalBlob || hasStorageUrl;
-                    const isStreaming = receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100;
-
-                      return verifyingId === job.id ? (
-                        <div className="flex gap-3 items-center">
-                          <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
-                          <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
-                          <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handlePreview(job)}
-                            disabled={!isReady}
-                            className="bg-secondary text-muted-foreground h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:bg-secondary/70 disabled:opacity-30"
-                          >
-                            <Eye size={16} />
-                            Preview
-                          </button>
-                          
-                          <button
-                            onClick={() => setVerifyingId(job.id)}
-                            disabled={!isReady}
-                            className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
-                          >
-                          <ShieldCheck size={18} />
-                          {isStreaming ? "STREAMING..." : isReady ? "RELEASE PRINT" : "UPLOADING..."}
-                        </button>
-
-                        <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
-                      </>
-                    );
-                  })()}
+                  {verifyingId === job.id ? (
+                    <div className="flex gap-3 items-center">
+                      <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
+                      <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
+                      <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <button onClick={() => handlePreview(job)} className="bg-secondary text-muted-foreground h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:bg-secondary/70"><Eye size={16} /> Preview</button>
+                      <button onClick={() => setVerifyingId(job.id)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide"><ShieldCheck size={18} /> RELEASE PRINT</button>
+                      <button onClick={async () => { await removeJob(shopId || "", job.id); fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
+                    </>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -606,54 +281,18 @@ const ShopDashboard = () => {
 
       <AnimatePresence>
         {previewItem && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => {
-              URL.revokeObjectURL(previewItem.url);
-              setPreviewItem(null);
-            }}
-            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden glass-panel !p-0 cursor-default"
-            >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPreviewItem(null)} className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden glass-panel !p-0 cursor-default">
               <div className="p-4 flex items-center justify-between border-b border-border bg-background/50">
                 <h3 className="font-bold truncate pr-4">{previewItem.job.fileName}</h3>
-                <button
-                  onClick={() => {
-                    URL.revokeObjectURL(previewItem.url);
-                    setPreviewItem(null);
-                  }}
-                  className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                >
-                  <X size={20} />
-                </button>
+                <button onClick={() => setPreviewItem(null)} className="p-2 hover:bg-secondary rounded-lg transition-colors"><X size={20} /></button>
               </div>
-              
               <div className="flex-1 overflow-auto p-4 bg-muted/30 flex items-center justify-center">
-                {previewItem.job.fileType.startsWith("image/") ? (
-                  <img
-                    src={previewItem.url}
-                    alt={previewItem.job.fileName}
-                    className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
-                  />
-                ) : previewItem.job.fileType === "application/pdf" ? (
-                  <SecurePDFPreview url={previewItem.url} />
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4">
-                    <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
-                      <FileText size={32} />
-                    </div>
-                    <p className="font-medium text-lg">Preview not available</p>
-                    <p className="text-sm opacity-60">{previewItem.job.fileType}</p>
-                  </div>
-                )}
+                {!previewItem.url ? <Loader2 className="animate-spin text-primary" size={32} /> : 
+                  previewItem.job.fileType.startsWith("image/") ? <img src={previewItem.url} alt="Preview" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" /> :
+                  previewItem.job.fileType === "application/pdf" ? <SecurePDFPreview url={previewItem.url} /> :
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4"><FileText size={32} /><p className="font-medium text-lg">Preview not available</p></div>
+                }
               </div>
             </motion.div>
           </motion.div>
@@ -666,7 +305,6 @@ const ShopDashboard = () => {
 const SecurePDFPreview = ({ url }: { url: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     const renderPDF = async () => {
       try {
@@ -676,13 +314,10 @@ const SecurePDFPreview = ({ url }: { url: string }) => {
         const viewport = page.getViewport({ scale: 1.5 });
         const canvas = canvasRef.current;
         if (!canvas) return;
-
         const context = canvas.getContext('2d');
         if (!context) return;
-
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-
         await page.render({ canvasContext: context, viewport }).promise;
         setLoading(false);
       } catch (err) {
@@ -692,19 +327,10 @@ const SecurePDFPreview = ({ url }: { url: string }) => {
     };
     renderPDF();
   }, [url]);
-
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-white rounded-lg overflow-hidden select-none">
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10">
-          <Loader2 className="animate-spin text-primary" size={32} />
-        </div>
-      )}
-      <canvas 
-        ref={canvasRef} 
-        className="max-w-full max-h-[70vh] object-contain shadow-2xl"
-        onContextMenu={(e) => e.preventDefault()}
-      />
+      {loading && <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10"><Loader2 className="animate-spin text-primary" size={32} /></div>}
+      <canvas ref={canvasRef} className="max-w-full max-h-[70vh] object-contain shadow-2xl" onContextMenu={(e) => e.preventDefault()} />
       <div className="absolute bottom-4 right-4 bg-primary/20 backdrop-blur-md px-3 py-1 rounded-full border border-primary/20 pointer-events-none">
         <span className="text-[10px] font-black text-primary tracking-widest uppercase">Secure Preview • Page 1</span>
       </div>
