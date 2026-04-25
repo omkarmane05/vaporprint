@@ -3,17 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Security: Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://rseflwgzgloscirzbcqb.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://rseflwgzgloscirzbcqb.supabase.co; connect-src 'self' https://rseflwgzgloscirzbcqb.supabase.co wss://rseflwgzgloscirzbcqb.supabase.co https://openrelay.metered.ca; frame-src 'self';">
+
+    <!-- SEO & Performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <title>VaporPrint | Privacy-First Cloud Printing</title>
     <meta name="description" content="Secure, ephemeral P2P document transfer for modern print shops." />
     
     <!-- Printer SVG Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238B5CF6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9V2h12v7'/><path d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/><rect x='6' y='14' width='12' height='8'/></svg>" />
 
-    <meta property="og:title" content="VaporPrint" />
-    <meta property="og:description" content="Secure, ephemeral P2P document transfer for modern print shops." />
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="VaporPrint | Privacy-First Printing" />
+    <meta property="og:description" content="Stop risking your data at the Xerox shop. Print securely with zero local storage." />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vaporprint.vercel.app" />
+    <meta property="og:image" content="https://vaporprint.vercel.app/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    
     <meta name="theme-color" content="#a78bfa" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [{
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://vaporprint.vercel.app"
+      },{
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Upload",
+        "item": "https://vaporprint.vercel.app/upload"
+      }]
+    }
+    </script>
   </head>
 
   <body>
