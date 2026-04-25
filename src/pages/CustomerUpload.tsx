@@ -185,15 +185,27 @@ const CustomerUpload = () => {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      // Step 3: Update job record to signal upload is complete
-      // Note: We don't store the URL here anymore for privacy. 
-      // The dashboard will construct the path from the jobId.
-      const { error: updateError } = await supabase
-        .from("print_jobs")
-        .update({ file_data_url: "STORED_SECURE" })
-        .eq("id", jobId);
+      // Step 3: Get public URL and update job record
+      const { data: urlData } = supabase.storage
+        .from("vprint-uploads")
+        .getPublicUrl(storagePath);
 
-      if (updateError) throw new Error("Metadata sync failed. Refreshing...");
+      // Retry update if mobile network blips
+      let updated = false;
+      for (let i = 0; i < 3; i++) {
+        const { error: updateError } = await supabase
+          .from("print_jobs")
+          .update({ file_data_url: urlData.publicUrl })
+          .eq("id", jobId);
+        
+        if (!updateError) {
+          updated = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      if (!updated) throw new Error("Metadata sync failed. Refreshing...");
 
       setStatus("Document uploaded ✓");
 
@@ -203,7 +215,8 @@ const CustomerUpload = () => {
           config: {
             iceServers: [
               { urls: "stun:stun.l.google.com:19302" },
-              { urls: "stun:stun1.l.google.com:19302" }
+              { urls: "stun:stun1.l.google.com:19302" },
+              { urls: "turn:openrelay.metered.ca:80", username: "openrelay", credential: "openrelay" }
             ],
           }
         });
@@ -227,18 +240,31 @@ const CustomerUpload = () => {
         // P2P is entirely optional — swallow errors
       }
 
-      // Step 5: Simple notification signal (no metadata)
+      // Step 5 (Optional): Try Realtime broadcast notification
       try {
-        const channel = supabase.channel(`vprint-notify-${safeShopId}`);
-        await channel.subscribe();
+        const channel = supabase.channel(`vprint-relay-${safeShopId}`, {
+          config: { broadcast: { self: false, ack: true } }
+        });
+
+        const subscribePromise = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("timeout")), 8000);
+          channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') { clearTimeout(timeout); resolve(); }
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { clearTimeout(timeout); reject(new Error(status)); }
+          });
+        });
+
+        await subscribePromise;
+        // Notify station that file is ready (lightweight signal, not the actual file)
         await channel.send({
           type: "broadcast",
-          event: "new-job",
-          payload: { jobId }
+          event: "file_ready",
+          payload: { jobId, fileName: file.name, fileType: file.type, storageUrl: urlData.publicUrl }
         });
         setTimeout(() => supabase.removeChannel(channel), 5000);
-      } catch (err) {
-        console.warn("Signal failed:", err);
+      } catch {
+        // Realtime notification is best-effort — station will pick it up via DB polling
+        console.log("[Relay] Notification skipped — station will poll from DB.");
       }
 
       setLoading(false);
