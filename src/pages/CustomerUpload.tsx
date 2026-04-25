@@ -285,40 +285,51 @@ const CustomerUpload = () => {
             <div className="p-16 text-center"><div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center mx-auto mb-6"><Upload className="text-muted-foreground/60" size={24} /></div><p className="text-sm font-medium">{file ? <span className="text-primary">{file.name}</span> : <span className="text-muted-foreground font-light">Select document</span>}</p></div>
           </div>
 
-          {file && numPages && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-4">
-              <div className="glass-panel p-5 space-y-4">
+          {file && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              <div className="glass-panel p-5 space-y-4 border-primary/10">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Page Range</span>
-                  <span className="text-xs font-bold text-primary">{numPages} Pages Total</span>
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Configuration</span>
+                  <div className="flex items-center gap-2">
+                    {isPreviewLoading && <Loader2 className="animate-spin text-primary" size={12} />}
+                    <span className="text-xs font-bold text-primary">
+                      {numPages ? `${numPages} Pages Detected` : isPreviewLoading ? "Analyzing Document..." : "Single Page"}
+                    </span>
+                  </div>
                 </div>
                 
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setPageRange("All")} 
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${pageRange === "All" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
-                  >
-                    ALL
-                  </button>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. 1-5, 8, 11-13" 
-                    value={pageRange === "All" ? "" : pageRange}
-                    onChange={(e) => setPageRange(e.target.value)}
-                    className={`flex-[2] bg-secondary/50 border border-primary/10 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 ring-primary/20 transition-all ${pageRange !== "All" ? "text-primary" : ""}`}
-                    onClick={() => pageRange === "All" && setPageRange("")}
-                  />
-                </div>
+                {(!file.type.includes("pdf") || numPages === 1) ? (
+                  <div className="py-2 px-4 bg-secondary/30 rounded-xl border border-dashed border-primary/5">
+                    <p className="text-[10px] text-muted-foreground font-medium italic text-center">Page selection only available for multi-page PDFs.</p>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setPageRange("All")} 
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${pageRange === "All" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
+                    >
+                      ALL
+                    </button>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 1-5, 8, 11-13" 
+                      value={pageRange === "All" ? "" : pageRange}
+                      onChange={(e) => setPageRange(e.target.value)}
+                      className={`flex-[2] bg-secondary/50 border border-primary/10 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 ring-primary/20 transition-all ${pageRange !== "All" ? "text-primary" : ""}`}
+                      onClick={() => pageRange === "All" && setPageRange("")}
+                    />
+                  </div>
+                )}
 
                 {previews.length > 0 && (
                   <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide pt-2">
                     {previews.map((src, i) => (
-                      <div key={i} className="flex-shrink-0 w-24 aspect-[3/4] rounded-lg border border-primary/10 overflow-hidden bg-white shadow-sm">
+                      <div key={i} className="flex-shrink-0 w-24 aspect-[3/4] rounded-lg border border-primary/10 overflow-hidden bg-white shadow-sm relative">
                         <img src={src} alt={`Page ${i + 1}`} className="w-full h-full object-cover" />
                         <div className="absolute top-1 left-1 bg-primary/80 text-[8px] text-white px-1.5 py-0.5 rounded-md font-bold">P{i + 1}</div>
                       </div>
                     ))}
-                    {numPages > previews.length && (
+                    {numPages && numPages > previews.length && (
                       <div className="flex-shrink-0 w-24 aspect-[3/4] rounded-lg border border-dashed border-primary/20 flex flex-col items-center justify-center bg-secondary/30 text-muted-foreground">
                         <span className="text-[10px] font-bold">+{numPages - previews.length}</span>
                         <span className="text-[8px] uppercase font-black">More</span>
