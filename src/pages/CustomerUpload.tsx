@@ -7,8 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Peer } from "peerjs";
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use a more stable worker URL
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const CustomerUpload = () => {
   const { shopId } = useParams<{ shopId: string }>();
@@ -60,31 +60,39 @@ const CustomerUpload = () => {
 
     if (f.type === "application/pdf") {
       setIsPreviewLoading(true);
+      setStatus("Analyzing PDF...");
       try {
         const arrayBuffer = await f.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const loadingTask = pdfjsLib.getDocument({ 
+          data: arrayBuffer,
+          useWorkerFetch: true,
+          isEvalSupported: false 
+        });
+        
+        const pdf = await loadingTask.promise;
         setNumPages(pdf.numPages);
 
         const previewUrls: string[] = [];
-        // Generate previews for the first 3 pages (or fewer if document is shorter)
         const pagesToPreview = Math.min(pdf.numPages, 3);
         
         for (let i = 1; i <= pagesToPreview; i++) {
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 0.5 });
+          const viewport = page.getViewport({ scale: 0.4 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-
+          
           if (context) {
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
             await page.render({ canvasContext: context, viewport }).promise;
-            previewUrls.push(canvas.toDataURL());
+            previewUrls.push(canvas.toDataURL('image/webp', 0.6));
           }
         }
         setPreviews(previewUrls);
+        setStatus(null);
       } catch (err) {
         console.error("PDF parsing failed:", err);
+        setStatus("PDF preview failed (continuing anyway)");
       } finally {
         setIsPreviewLoading(false);
       }
