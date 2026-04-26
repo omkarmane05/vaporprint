@@ -329,15 +329,93 @@ const ShopDashboard = () => {
 
     // For PDFs and Images, we can try to render them directly for printing
     if (fileType === "application/pdf" || fileType.startsWith("image/")) {
+      printWindow.document.title = `VaporPrint - ${fileName}`;
       printWindow.document.body.style.margin = "0";
-      printWindow.document.body.innerHTML = fileType === "application/pdf"
-        ? `<embed src="${url}" type="application/pdf" width="100%" height="100%">`
-        : `<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><img src="${url}" style="max-width:100%;height:auto;box-shadow:0 0 50px rgba(0,0,0,0.1)"></div>`;
+      printWindow.document.body.style.background = "#1e1e2e";
+      
+      const isImage = fileType.startsWith("image/");
+      
+      printWindow.document.body.innerHTML = `
+        <style>
+          @media print {
+            @page { margin: 0; }
+            body { margin: 0; background: white !important; }
+            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; }
+            .no-print { display: none !important; }
+          }
+          body { 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            font-family: system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            background: #1e1e2e;
+          }
+          .container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+          img { 
+            max-width: 95%; 
+            max-height: 95vh; 
+            object-fit: contain; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            border-radius: 8px;
+            background: white;
+          }
+          iframe, embed {
+            width: 95%;
+            height: 95vh;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            background: white;
+          }
+          .header {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 100px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 100;
+            border: 1px solid rgba(255,255,255,0.1);
+          }
+        </style>
+        <div class="header no-print">VAPORPRINT SECURE RELEASE • ${fileName}</div>
+        <div class="container">
+          ${isImage 
+            ? `<img src="${url}" alt="Print Preview">` 
+            : `<iframe src="${url}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf"></iframe>`
+          }
+        </div>
+      `;
 
       // Attempt to auto-print after a small load delay
       setTimeout(() => {
-        try { printWindow.print(); } catch (e) { }
-      }, 1000);
+        try { 
+          if (!isImage) {
+            const frame = printWindow.document.querySelector('iframe');
+            frame?.contentWindow?.focus();
+          }
+          printWindow.print(); 
+        } catch (e) { 
+          console.error("Print trigger failed", e);
+        }
+      }, 1500);
     } else {
       // For other types, we have to let the browser handle it (which might download)
       printWindow.location.href = url;
