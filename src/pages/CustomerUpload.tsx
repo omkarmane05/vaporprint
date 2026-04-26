@@ -24,6 +24,9 @@ const CustomerUpload = () => {
   const [isVerifying, setIsVerifying] = useState(true);
   const [pageRange, setPageRange] = useState("All");
   const [numPages, setNumPages] = useState<number | null>(null);
+  const [colorMode, setColorMode] = useState<'color' | 'bw'>('bw');
+  const [duplex, setDuplex] = useState<'single' | 'double'>('single');
+  const [layout, setLayout] = useState<number>(1);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -170,6 +173,9 @@ const CustomerUpload = () => {
         timestamp: Date.now(),
         shopId,
         pageRange: pageRange === "All" ? `1-${numPages || 1}` : pageRange,
+        colorMode,
+        duplex,
+        layout,
       });
 
       // Step 2: Upload file to Supabase Storage (reliable HTTP upload)
@@ -367,6 +373,60 @@ const CustomerUpload = () => {
                     />
                   </div>
                 )}
+
+                {/* Print Strategy Controls */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Color Mode</span>
+                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5">
+                      <button 
+                        onClick={() => setColorMode('bw')}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${colorMode === 'bw' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
+                      >
+                        B&W
+                      </button>
+                      <button 
+                        onClick={() => setColorMode('color')}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${colorMode === 'color' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
+                      >
+                        COLOR
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Sides</span>
+                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5">
+                      <button 
+                        onClick={() => setDuplex('single')}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${duplex === 'single' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
+                      >
+                        1-SIDE
+                      </button>
+                      <button 
+                        onClick={() => setDuplex('double')}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${duplex === 'double' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
+                      >
+                        2-SIDE
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Layout (Pages per sheet)</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[1, 2, 4, 6].map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => setLayout(l)}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all border ${layout === l ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/30 text-muted-foreground border-primary/5"}`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {previews.length > 0 && (
                   <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide pt-2">

@@ -539,9 +539,24 @@ const ShopDashboard = () => {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
-                        {job.pageRange && (
-                          <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md">Pages: {job.pageRange}</span>
-                        )}
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {job.pageRange && (
+                            <span className="text-[10px] font-bold bg-primary/5 text-primary border border-primary/10 px-2 py-0.5 rounded-md">Pgs: {job.pageRange}</span>
+                          )}
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 ${job.colorMode === 'color' ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${job.colorMode === 'color' ? "bg-amber-400 animate-pulse" : "bg-slate-300"}`} />
+                            {job.colorMode === 'color' ? "COLOR" : "B&W"}
+                          </span>
+                          <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Printer size={10} />
+                            {job.duplex === 'double' ? "DUPLEX" : "1-SIDE"}
+                          </span>
+                          {job.layout && job.layout > 1 && (
+                            <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-md">
+                              {job.layout}-UP LAYOUT
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100 && (
@@ -565,10 +580,22 @@ const ShopDashboard = () => {
                     const isStreaming = receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100;
 
                       return verifyingId === job.id ? (
-                        <div className="flex gap-3 items-center">
-                          <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
-                          <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
-                          <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex gap-3 items-center">
+                            <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
+                            <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
+                            <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 rounded-xl border border-primary/10 animate-in fade-in slide-in-from-top-1">
+                            <span className="text-[9px] font-black uppercase text-primary/40 tracking-widest">Print Strategy:</span>
+                            <span className="text-[10px] font-black text-primary flex items-center gap-1.5">
+                              {job.colorMode === 'color' ? <span className="text-amber-600">COLOR</span> : "B&W"} 
+                              <span className="opacity-20">•</span> 
+                              {job.duplex === 'double' ? "DOUBLE-SIDED" : "SINGLE-SIDED"} 
+                              <span className="opacity-20">•</span> 
+                              {job.layout} PAGE(S)/SHEET
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <>

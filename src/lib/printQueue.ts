@@ -11,6 +11,9 @@ export interface PrintJob {
   timestamp: number;
   shopId: string;
   pageRange?: string;
+  colorMode?: 'color' | 'bw';
+  duplex?: 'single' | 'double';
+  layout?: number; // pages per sheet
 }
 
 function rowToJob(row: any): PrintJob {
@@ -25,6 +28,9 @@ function rowToJob(row: any): PrintJob {
     timestamp: new Date(row.created_at).getTime(),
     shopId: row.shop_id,
     pageRange: row.page_range,
+    colorMode: row.color_mode,
+    duplex: row.duplex,
+    layout: row.layout,
   };
 }
 
@@ -51,6 +57,9 @@ export async function addJob(shopId: string, job: PrintJob) {
     copies: job.copies,
     code: job.code,
     page_range: job.pageRange,
+    color_mode: job.colorMode,
+    duplex: job.duplex,
+    layout: job.layout,
   });
   if (error) {
     throw error;
