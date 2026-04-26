@@ -586,15 +586,22 @@ const ShopDashboard = () => {
                             <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
                             <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
                           </div>
-                          <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 rounded-xl border border-primary/10 animate-in fade-in slide-in-from-top-1">
-                            <span className="text-[9px] font-black uppercase text-primary/40 tracking-widest">Print Strategy:</span>
-                            <span className="text-[10px] font-black text-primary flex items-center gap-1.5">
-                              {job.colorMode === 'color' ? <span className="text-amber-600">COLOR</span> : "B&W"} 
-                              <span className="opacity-20">•</span> 
-                              {job.duplex === 'double' ? "DOUBLE-SIDED" : "SINGLE-SIDED"} 
-                              <span className="opacity-20">•</span> 
-                              {job.layout} PAGE(S)/SHEET
-                            </span>
+                          <div className="flex flex-col gap-3 px-4 py-4 bg-primary/5 rounded-2xl border border-primary/20 animate-in fade-in slide-in-from-top-2 shadow-inner">
+                            <span className="text-[11px] font-black uppercase text-primary/50 tracking-[0.2em]">Print Strategy Configuration:</span>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="text-sm font-black text-primary bg-white px-3 py-1 rounded-lg border border-primary/10 shadow-sm flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${job.colorMode === 'color' ? "bg-amber-400" : "bg-slate-400"}`} />
+                                {job.colorMode === 'color' ? "COLOR" : "B&W"}
+                              </span>
+                              <span className="text-primary/20 font-light text-xl">/</span>
+                              <span className="text-sm font-black text-primary bg-white px-3 py-1 rounded-lg border border-primary/10 shadow-sm">
+                                {job.duplex === 'double' ? "DOUBLE-SIDED" : "SINGLE-SIDED"}
+                              </span>
+                              <span className="text-primary/20 font-light text-xl">/</span>
+                              <span className="text-sm font-black text-primary bg-white px-3 py-1 rounded-lg border border-primary/10 shadow-sm">
+                                {job.layout} PAGE(S) PER SHEET
+                              </span>
+                            </div>
                           </div>
                         </div>
                       ) : (

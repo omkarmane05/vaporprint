@@ -358,17 +358,17 @@ const CustomerUpload = () => {
                   <div className="flex gap-2">
                     <button 
                       onClick={() => setPageRange("All")} 
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${pageRange === "All" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
+                      className={`flex-1 py-3 rounded-xl text-sm font-black transition-all ${pageRange === "All" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "bg-secondary text-muted-foreground"}`}
                     >
-                      ALL
+                      ALL PAGES
                     </button>
                     <input 
                       type="text" 
-                      placeholder="e.g. 1-5, 8, 11-13" 
+                      placeholder="e.g. 1-5, 8" 
                       value={pageRange === "All" ? "" : pageRange}
                       onChange={(e) => setPageRange(e.target.value)}
                       onBlur={() => file && numPages && updatePreviews(file, pageRange, numPages)}
-                      className={`flex-[2] bg-secondary/50 border border-primary/10 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 ring-primary/20 transition-all ${pageRange !== "All" ? "text-primary" : ""}`}
+                      className={`flex-[2] bg-secondary/60 border-2 border-primary/10 rounded-xl px-4 py-3 text-sm font-black outline-none focus:ring-4 ring-primary/10 transition-all ${pageRange !== "All" ? "text-primary border-primary/30" : ""}`}
                       onClick={() => pageRange === "All" && setPageRange("")}
                     />
                   </div>
@@ -377,19 +377,19 @@ const CustomerUpload = () => {
                 {/* Print Strategy Controls */}
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div className="space-y-2">
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Color Mode</span>
-                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5 relative">
+                    <span className="text-[11px] uppercase tracking-widest font-black text-muted-foreground/80">Color Mode</span>
+                    <div className="flex p-1.5 bg-secondary/60 rounded-2xl border-2 border-primary/5 relative">
                       {['bw', 'color'].map((mode) => (
                         <button 
                           key={mode}
                           type="button"
                           onClick={() => setColorMode(mode as 'color' | 'bw')}
-                          className={`relative z-10 flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors duration-300 ${colorMode === mode ? "text-primary" : "text-muted-foreground hover:text-muted-foreground/80"}`}
+                          className={`relative z-10 flex-1 py-3 rounded-xl text-xs font-black transition-colors duration-300 ${colorMode === mode ? "text-primary" : "text-muted-foreground/70 hover:text-muted-foreground"}`}
                         >
                           {colorMode === mode && (
                             <motion.div 
                               layoutId="colorModeBackground"
-                              className="absolute inset-0 bg-white shadow-sm rounded-lg -z-10"
+                              className="absolute inset-0 bg-white shadow-md rounded-xl -z-10 border border-primary/10"
                               transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                             />
                           )}
@@ -400,19 +400,19 @@ const CustomerUpload = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Sides</span>
-                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5 relative">
+                    <span className="text-[11px] uppercase tracking-widest font-black text-muted-foreground/80">Sides</span>
+                    <div className="flex p-1.5 bg-secondary/60 rounded-2xl border-2 border-primary/5 relative">
                       {['single', 'double'].map((side) => (
                         <button 
                           key={side}
                           type="button"
                           onClick={() => setDuplex(side as 'single' | 'double')}
-                          className={`relative z-10 flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors duration-300 ${duplex === side ? "text-primary" : "text-muted-foreground hover:text-muted-foreground/80"}`}
+                          className={`relative z-10 flex-1 py-3 rounded-xl text-xs font-black transition-colors duration-300 ${duplex === side ? "text-primary" : "text-muted-foreground/70 hover:text-muted-foreground"}`}
                         >
                           {duplex === side && (
                             <motion.div 
                               layoutId="duplexBackground"
-                              className="absolute inset-0 bg-white shadow-sm rounded-lg -z-10"
+                              className="absolute inset-0 bg-white shadow-md rounded-xl -z-10 border border-primary/10"
                               transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                             />
                           )}
@@ -460,9 +460,9 @@ const CustomerUpload = () => {
           )}
 
           <div className="glass-panel p-5 flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Quantity</span><div className="flex items-center gap-4"><button type="button" onClick={() => setCopies(Math.max(1, copies - 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">-</button><span className="font-bold text-xl">{copies}</span><button type="button" onClick={() => setCopies(Math.min(50, copies + 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">+</button></div></div>
-          <button onClick={handleUpload} disabled={!file || loading} className="w-full bg-primary text-primary-foreground h-16 rounded-[1.5rem] font-bold text-base transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3">
-            {loading && <Loader2 className="animate-spin" size={20} />}
-            {loading ? status : "INITIALIZE VAPOR-CORE"}
+          <button onClick={handleUpload} disabled={!file || loading} className="w-full bg-primary text-primary-foreground h-16 rounded-[1.5rem] font-bold text-lg tracking-tight transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3 shadow-xl shadow-primary/20">
+            {loading && <Loader2 className="animate-spin" size={24} />}
+            {loading ? status : "UPLOAD UPDATE"}
           </button>
         </div>
       </motion.div>
