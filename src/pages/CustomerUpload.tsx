@@ -378,37 +378,47 @@ const CustomerUpload = () => {
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div className="space-y-2">
                     <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Color Mode</span>
-                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5">
-                      <button 
-                        onClick={() => setColorMode('bw')}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${colorMode === 'bw' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
-                      >
-                        B&W
-                      </button>
-                      <button 
-                        onClick={() => setColorMode('color')}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${colorMode === 'color' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
-                      >
-                        COLOR
-                      </button>
+                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5 relative">
+                      {['bw', 'color'].map((mode) => (
+                        <button 
+                          key={mode}
+                          type="button"
+                          onClick={() => setColorMode(mode as 'color' | 'bw')}
+                          className={`relative z-10 flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors duration-300 ${colorMode === mode ? "text-primary" : "text-muted-foreground hover:text-muted-foreground/80"}`}
+                        >
+                          {colorMode === mode && (
+                            <motion.div 
+                              layoutId="colorModeBackground"
+                              className="absolute inset-0 bg-white shadow-sm rounded-lg -z-10"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                            />
+                          )}
+                          {mode === 'bw' ? 'B&W' : 'COLOR'}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">Sides</span>
-                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5">
-                      <button 
-                        onClick={() => setDuplex('single')}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${duplex === 'single' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
-                      >
-                        1-SIDE
-                      </button>
-                      <button 
-                        onClick={() => setDuplex('double')}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${duplex === 'double' ? "bg-white shadow-sm text-primary" : "text-muted-foreground"}`}
-                      >
-                        2-SIDE
-                      </button>
+                    <div className="flex p-1 bg-secondary/50 rounded-xl border border-primary/5 relative">
+                      {['single', 'double'].map((side) => (
+                        <button 
+                          key={side}
+                          type="button"
+                          onClick={() => setDuplex(side as 'single' | 'double')}
+                          className={`relative z-10 flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors duration-300 ${duplex === side ? "text-primary" : "text-muted-foreground hover:text-muted-foreground/80"}`}
+                        >
+                          {duplex === side && (
+                            <motion.div 
+                              layoutId="duplexBackground"
+                              className="absolute inset-0 bg-white shadow-sm rounded-lg -z-10"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                            />
+                          )}
+                          {side === 'single' ? '1-SIDE' : '2-SIDE'}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -419,6 +429,7 @@ const CustomerUpload = () => {
                     {[1, 2, 4, 6].map((l) => (
                       <button
                         key={l}
+                        type="button"
                         onClick={() => setLayout(l)}
                         className={`py-2 rounded-xl text-xs font-bold transition-all border ${layout === l ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/30 text-muted-foreground border-primary/5"}`}
                       >
@@ -448,7 +459,7 @@ const CustomerUpload = () => {
             </motion.div>
           )}
 
-          <div className="glass-panel p-5 flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Quantity</span><div className="flex items-center gap-4"><button onClick={() => setCopies(Math.max(1, copies - 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">-</button><span className="font-bold text-xl">{copies}</span><button onClick={() => setCopies(Math.min(50, copies + 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">+</button></div></div>
+          <div className="glass-panel p-5 flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Quantity</span><div className="flex items-center gap-4"><button type="button" onClick={() => setCopies(Math.max(1, copies - 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">-</button><span className="font-bold text-xl">{copies}</span><button type="button" onClick={() => setCopies(Math.min(50, copies + 1))} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:scale-90">+</button></div></div>
           <button onClick={handleUpload} disabled={!file || loading} className="w-full bg-primary text-primary-foreground h-16 rounded-[1.5rem] font-bold text-base transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3">
             {loading && <Loader2 className="animate-spin" size={20} />}
             {loading ? status : "INITIALIZE VAPOR-CORE"}

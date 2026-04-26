@@ -23,6 +23,10 @@ export type Database = {
           file_type: string
           id: string
           shop_id: string
+          page_range: string | null
+          color_mode: string | null
+          duplex: string | null
+          layout: number | null
         }
         Insert: {
           code: string
@@ -34,6 +38,10 @@ export type Database = {
           file_type: string
           id?: string
           shop_id: string
+          page_range?: string | null
+          color_mode?: string | null
+          duplex?: string | null
+          layout?: number | null
         }
         Update: {
           code?: string
@@ -45,6 +53,10 @@ export type Database = {
           file_type?: string
           id?: string
           shop_id?: string
+          page_range?: string | null
+          color_mode?: string | null
+          duplex?: string | null
+          layout?: number | null
         }
         Relationships: []
       }
