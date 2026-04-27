@@ -443,7 +443,7 @@ const CustomerUpload = () => {
                   <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide pt-2">
                     {previews.map((src, i) => (
                       <div key={i} className="flex-shrink-0 w-24 aspect-[3/4] rounded-lg border border-primary/10 overflow-hidden bg-white shadow-sm relative">
-                        <img src={src} alt={`Page ${i + 1}`} className="w-full h-full object-cover" />
+                        <img src={src} alt={`Page ${i + 1}`} className="w-full h-full object-contain" />
                         <div className="absolute top-1 left-1 bg-primary/80 text-[8px] text-white px-1.5 py-0.5 rounded-md font-bold">P{i + 1}</div>
                       </div>
                     ))}

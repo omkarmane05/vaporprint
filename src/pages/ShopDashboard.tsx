@@ -340,7 +340,9 @@ const ShopDashboard = () => {
           @media print {
             @page { margin: 0; }
             body { margin: 0; background: white !important; }
-            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; }
+            .container { padding: 0 !important; height: auto !important; width: 100% !important; display: block !important; }
+            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; margin: 0 auto; }
+            iframe, embed { width: 100% !important; height: 100vh !important; }
             .no-print { display: none !important; }
           }
           body { 
@@ -348,34 +350,36 @@ const ShopDashboard = () => {
             display: flex; 
             flex-direction: column;
             align-items: center; 
-            justify-content: center; 
+            justify-content: flex-start; 
             min-height: 100vh; 
             font-family: system-ui, -apple-system, sans-serif;
-            overflow: hidden;
+            overflow: auto;
             background: #1e1e2e;
           }
           .container {
             width: 100%;
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 20px;
+            justify-content: flex-start;
+            padding: 40px 20px;
             box-sizing: border-box;
           }
           img { 
-            max-width: 95%; 
-            max-height: 95vh; 
-            object-fit: contain; 
+            max-width: 100%; 
+            max-height: 90vh; 
+            object-fit: scale-down; 
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-            border-radius: 8px;
+            border-radius: 12px;
             background: white;
           }
           iframe, embed {
-            width: 95%;
-            height: 95vh;
+            width: 100%;
+            max-width: 1000px;
+            height: 90vh;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
             background: white;
           }
@@ -409,11 +413,18 @@ const ShopDashboard = () => {
         try { 
           if (!isImage) {
             const frame = printWindow.document.querySelector('iframe');
-            frame?.contentWindow?.focus();
+            if (frame && frame.contentWindow) {
+              frame.contentWindow.focus();
+              frame.contentWindow.print();
+            } else {
+              printWindow.print();
+            }
+          } else {
+            printWindow.print(); 
           }
-          printWindow.print(); 
         } catch (e) { 
           console.error("Print trigger failed", e);
+          printWindow.print(); // Fallback to parent print
         }
       }, 1500);
     } else {
