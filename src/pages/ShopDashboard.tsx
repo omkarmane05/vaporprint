@@ -347,14 +347,11 @@ const ShopDashboard = () => {
           }
           body { 
             margin: 0; 
-            display: flex; 
-            flex-direction: column;
-            align-items: center; 
-            justify-content: flex-start; 
             min-height: 100vh; 
             font-family: system-ui, -apple-system, sans-serif;
             overflow: auto;
             background: #1e1e2e;
+            display: block; /* Change from flex to block to avoid centering bugs on overflow */
           }
           .container {
             width: 100%;
@@ -363,7 +360,7 @@ const ShopDashboard = () => {
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
-            padding: 40px 20px;
+            padding: 40px 0; /* Remove side padding to maximize space, use margins on children */
             box-sizing: border-box;
           }
           img { 
@@ -377,13 +374,15 @@ const ShopDashboard = () => {
             margin: 0 auto;
           }
           iframe, embed {
-            width: 100%;
+            width: 95%;
             max-width: 900px;
             height: 95vh;
             border: none;
             border-radius: 12px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
             background: white;
+            display: block;
+            margin: 0 auto;
           }
           .header {
             position: fixed;
@@ -758,17 +757,17 @@ const ShopDashboard = () => {
                 </button>
               </div>
               
-              <div className="flex-1 overflow-auto p-4 bg-muted/30 flex flex-col items-center">
+              <div className="flex-1 overflow-auto p-4 bg-muted/30">
                 {previewItem.job.fileType.startsWith("image/") ? (
                   <img
                     src={previewItem.url}
                     alt={previewItem.job.fileName}
-                    className="max-w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-xl"
+                    className="mx-auto block max-w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-xl"
                   />
                 ) : previewItem.job.fileType === "application/pdf" ? (
                   <iframe
                     src={`${previewItem.url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
-                    className="w-full max-w-3xl h-[75vh] rounded-lg bg-white shadow-lg border-none"
+                    className="mx-auto block w-full max-w-3xl h-[75vh] rounded-lg bg-white shadow-lg border-none"
                     title={previewItem.job.fileName}
                   />
                 ) : (
