@@ -21,31 +21,25 @@ const ActivateShop = () => {
     validateToken();
   }, [token]);
 
+  // Listen for auth state changes (handles post-email-confirmation)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Check for SIGNED_IN or INITIAL_SESSION (if they already confirmed in another tab)
-      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session && invite && !isSuccess) {
-        // Double check this user email matches the invite email
-        if (session.user.email === invite.email) {
-          await tryActivate();
-        }
+      if (event === "SIGNED_IN" && session && invite && !isSuccess) {
+        await tryActivate();
       }
     });
     return () => subscription.unsubscribe();
   }, [invite, isSuccess]);
 
   const validateToken = async () => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    if (!token) return;
 
     try {
       const { data, error } = await supabase
         .from("invitations")
         .select("*, shops(name)")
         .eq("token", token)
-        .gt("expires_at", new Date().toISOString())
+        .gt("expires_at", new Date().toISOString()) // CHECK EXPIRY
         .single();
 
       if (error || !data) {
@@ -54,21 +48,13 @@ const ActivateShop = () => {
         return;
       }
 
-      const shopData = data.shops as any;
-      if (!shopData) {
-        toast.error("Associated shop not found.");
-        navigate("/");
-        return;
-      }
-
       setInvite({
         id: data.id,
         shop_id: data.shop_id,
-        shop_name: shopData.name,
+        shop_name: data.shops.name,
         email: data.email
       });
-    } catch (err) {
-      console.error("Token validation error:", err);
+    } catch {
       navigate("/");
     } finally {
       setLoading(false);
@@ -128,7 +114,6 @@ const ActivateShop = () => {
         if (!data.session) {
           toast.info("Please check your email to confirm your account, then return to this page.");
           setActivating(false);
-          // Show a "Resend" button after a few seconds if it hasn't arrived
           return;
         }
 
@@ -279,20 +264,6 @@ const ActivateShop = () => {
             {activating ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />}
             {activating ? "SECURING..." : "ACTIVATE PRINT STATION"}
           </button>
-
-          {!activating && authMode === "signup" && (
-            <div className="text-center">
-              <button 
-                onClick={() => {
-                  setActivating(true);
-                  handleActivate().finally(() => setActivating(false));
-                }}
-                className="text-[10px] font-bold text-primary hover:underline uppercase tracking-widest"
-              >
-                Didn't get the email? Try Resending
-              </button>
-            </div>
-          )}
         </section>
 
         <footer className="text-center opacity-30">
