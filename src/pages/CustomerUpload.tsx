@@ -103,8 +103,8 @@ const CustomerUpload = () => {
   if (!shopId) return null;
 
   const handleFile = async (f: File) => {
-    if (f.size > 100 * 1024 * 1024) {
-      alert("File too large. Max 100MB for reliable transfer.");
+    if (f.size > 50 * 1024 * 1024) {
+      alert("File too large. Max 50MB for peer transfer.");
       return;
     }
     setFile(f);
