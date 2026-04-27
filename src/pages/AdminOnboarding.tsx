@@ -135,11 +135,16 @@ const AdminOnboarding = () => {
         const { data: funcData, error: funcError } = await supabase.functions.invoke('send-invitation', {
           body: { email, shopName, activationUrl }
         });
-        if (!funcError) {
-          toast.success("Invitation email sent automatically!");
+        
+        if (funcError) {
+          console.error("Edge function error:", funcError);
+          toast.error("Automated email failed. Please send manually.");
+        } else {
+          toast.success("Invitation email sent automatically! ✓");
         }
       } catch (e) {
-        console.log("Edge function call skipped or failed - falling back to manual send.");
+        console.error("Edge function call failed:", e);
+        toast.error("Auto-send failed. Use manual link.");
       }
 
       toast.success(`Invite generated for ${shopName}!`);
