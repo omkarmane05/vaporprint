@@ -21,7 +21,7 @@ const AdminOnboarding = () => {
   const [shopName, setShopName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [lastInvite, setLastInvite] = useState<{ name: string; url: string } | null>(null);
+  const [lastInvite, setLastInvite] = useState<{ name: string; url: string; email: string } | null>(null);
 
   useEffect(() => {
     checkAdminSession();
@@ -128,7 +128,20 @@ const AdminOnboarding = () => {
       });
       if (inviteError) throw inviteError;
 
-      setLastInvite({ name: shopName, url: activationUrl });
+      setLastInvite({ name: shopName, url: activationUrl, email: email });
+      
+      // Step 3: Trigger automated email (Edge Function)
+      try {
+        const { data: funcData, error: funcError } = await supabase.functions.invoke('send-invitation', {
+          body: { email, shopName, activationUrl }
+        });
+        if (!funcError) {
+          toast.success("Invitation email sent automatically!");
+        }
+      } catch (e) {
+        console.log("Edge function call skipped or failed - falling back to manual send.");
+      }
+
       toast.success(`Invite generated for ${shopName}!`);
       setShopName("");
       setEmail("");
@@ -381,26 +394,36 @@ const AdminOnboarding = () => {
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-6 bg-success/10 rounded-2xl border border-success/20 flex flex-col sm:flex-row items-center justify-between gap-6"
+                    className="p-6 bg-success/10 rounded-2xl border border-success/20 mt-8"
                   >
-                    <div className="space-y-1 overflow-hidden">
-                      <p className="text-[10px] font-bold text-success uppercase tracking-widest">ACTIVATION LINK CREATED</p>
-                      <p className="text-xs font-mono text-muted-foreground truncate w-full">{lastInvite.url}</p>
-                      {lastInvite.url.includes("localhost") && (
-                        <p className="text-[9px] text-amber-600 font-bold italic mt-1 flex items-center gap-1">
-                          <AlertCircle size={10} /> Localhost link won't work on other devices.
-                        </p>
-                      )}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+                      <div className="space-y-1 overflow-hidden w-full">
+                        <p className="text-[10px] font-bold text-success uppercase tracking-widest">ACTIVATION LINK CREATED</p>
+                        <p className="text-xs font-mono text-muted-foreground truncate w-full">{lastInvite.url}</p>
+                        {lastInvite.url.includes("localhost") && (
+                          <p className="text-[9px] text-amber-600 font-bold italic mt-1 flex items-center gap-1">
+                            <AlertCircle size={10} /> Localhost link won't work on other devices.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(lastInvite.url);
+                            toast.success("Copied to clipboard!");
+                          }}
+                          className="px-6 py-3 bg-white text-primary border border-primary/10 rounded-xl font-bold text-[10px] tracking-widest hover:bg-primary/5 transition-all"
+                        >
+                          COPY LINK
+                        </button>
+                        <a
+                          href={`mailto:${lastInvite.email}?subject=Invitation to join VaporPrint: ${lastInvite.name}&body=Hello!%0D%0A%0D%0AYou have been invited to manage the VaporPrint station: ${lastInvite.name}.%0D%0A%0D%0AClick the link below to initialize your station and set your password:%0D%0A${lastInvite.url}%0D%0A%0D%0ASee you there!`}
+                          className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-bold text-[10px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2"
+                        >
+                          <Mail size={12} /> SEND EMAIL
+                        </a>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(lastInvite.url);
-                        toast.success("Copied to clipboard!");
-                      }}
-                      className="px-6 py-3 bg-success text-success-foreground rounded-xl font-bold text-[10px] tracking-widest hover:brightness-105"
-                    >
-                      COPY NOW
-                    </button>
                   </motion.div>
                 )}
               </motion.div>
