@@ -128,6 +128,7 @@ const ActivateShop = () => {
         if (!data.session) {
           toast.info("Please check your email to confirm your account, then return to this page.");
           setActivating(false);
+          // Show a "Resend" button after a few seconds if it hasn't arrived
           return;
         }
 
@@ -278,6 +279,20 @@ const ActivateShop = () => {
             {activating ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />}
             {activating ? "SECURING..." : "ACTIVATE PRINT STATION"}
           </button>
+
+          {!activating && authMode === "signup" && (
+            <div className="text-center">
+              <button 
+                onClick={() => {
+                  setActivating(true);
+                  handleActivate().finally(() => setActivating(false));
+                }}
+                className="text-[10px] font-bold text-primary hover:underline uppercase tracking-widest"
+              >
+                Didn't get the email? Try Resending
+              </button>
+            </div>
+          )}
         </section>
 
         <footer className="text-center opacity-30">
