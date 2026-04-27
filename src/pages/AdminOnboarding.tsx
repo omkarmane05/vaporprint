@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Mail, Building, Copy, Shield, Sparkles, LayoutGrid, Radio, Trash2, Loader2, X, Lock, LogOut } from "lucide-react";
+import { Plus, Mail, Building, Copy, Shield, Sparkles, LayoutGrid, Radio, Trash2, Loader2, X, Lock, LogOut, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -383,9 +383,14 @@ const AdminOnboarding = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="p-6 bg-success/10 rounded-2xl border border-success/20 flex flex-col sm:flex-row items-center justify-between gap-6"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1 overflow-hidden">
                       <p className="text-[10px] font-bold text-success uppercase tracking-widest">ACTIVATION LINK CREATED</p>
-                      <p className="text-xs font-mono text-muted-foreground truncate max-w-[200px]">{lastInvite.url}</p>
+                      <p className="text-xs font-mono text-muted-foreground truncate w-full">{lastInvite.url}</p>
+                      {lastInvite.url.includes("localhost") && (
+                        <p className="text-[9px] text-amber-600 font-bold italic mt-1 flex items-center gap-1">
+                          <AlertCircle size={10} /> Localhost link won't work on other devices.
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => {

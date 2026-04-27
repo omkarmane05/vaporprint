@@ -21,25 +21,31 @@ const ActivateShop = () => {
     validateToken();
   }, [token]);
 
-  // Listen for auth state changes (handles post-email-confirmation)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session && invite && !isSuccess) {
-        await tryActivate();
+      // Check for SIGNED_IN or INITIAL_SESSION (if they already confirmed in another tab)
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session && invite && !isSuccess) {
+        // Double check this user email matches the invite email
+        if (session.user.email === invite.email) {
+          await tryActivate();
+        }
       }
     });
     return () => subscription.unsubscribe();
   }, [invite, isSuccess]);
 
   const validateToken = async () => {
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase
         .from("invitations")
         .select("*, shops(name)")
         .eq("token", token)
-        .gt("expires_at", new Date().toISOString()) // CHECK EXPIRY
+        .gt("expires_at", new Date().toISOString())
         .single();
 
       if (error || !data) {
@@ -48,13 +54,21 @@ const ActivateShop = () => {
         return;
       }
 
+      const shopData = data.shops as any;
+      if (!shopData) {
+        toast.error("Associated shop not found.");
+        navigate("/");
+        return;
+      }
+
       setInvite({
         id: data.id,
         shop_id: data.shop_id,
-        shop_name: data.shops.name,
+        shop_name: shopData.name,
         email: data.email
       });
-    } catch {
+    } catch (err) {
+      console.error("Token validation error:", err);
       navigate("/");
     } finally {
       setLoading(false);
