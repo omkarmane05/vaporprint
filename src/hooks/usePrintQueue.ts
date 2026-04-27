@@ -83,10 +83,21 @@ export function usePrintQueue(shopId: string): { jobs: PrintJob[]; fetchJobs: ()
         });
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchJobs();
+      }
+    };
+
+    window.addEventListener('focus', fetchJobs);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     subscribe();
 
     return () => {
       destroyed = true;
+      window.removeEventListener('focus', fetchJobs);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (retryTimer) clearTimeout(retryTimer);
       if (channel) supabase.removeChannel(channel);
     };
