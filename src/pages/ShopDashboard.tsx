@@ -472,21 +472,13 @@ const ShopDashboard = () => {
 
   const handleMasterRelease = async (code: string) => {
     if (code.length !== 6) return;
-    const matchingJobs = jobs.filter(j => j.code === code);
-    if (matchingJobs.length === 0) {
+    const matchingJob = jobs.find(j => j.code === code);
+    if (!matchingJob) {
       toast.error("Code not found in queue.");
       setMasterOtp("");
       return;
     }
-    
-    toast.success(`Releasing ${matchingJobs.length} document(s)...`);
-    // Release them one by one (this will open multiple print windows/tabs)
-    // Note: Browser might block multiple popups, but usually it's okay if triggered by one click
-    for (const job of matchingJobs) {
-      await handlePrint(job.id, code);
-      // Small delay to prevent some browser race conditions with popups
-      await new Promise(r => setTimeout(r, 500));
-    }
+    await handlePrint(matchingJob.id, code);
     setMasterOtp("");
   };
 
