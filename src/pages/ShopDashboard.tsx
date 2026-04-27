@@ -338,11 +338,27 @@ const ShopDashboard = () => {
       printWindow.document.body.innerHTML = `
         <style>
           @media print {
-            @page { margin: 0; }
+            @page { 
+              size: auto; 
+              margin: 10mm; /* Safe printable margin */
+            }
             body { margin: 0; background: white !important; }
             .container { padding: 0 !important; height: auto !important; width: 100% !important; display: block !important; }
-            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; margin: 0 auto; }
-            iframe, embed { width: 100% !important; height: 100vh !important; }
+            img { 
+              max-width: 100% !important; 
+              max-height: 270mm !important; /* Approx A4 height minus margins */
+              height: auto !important; 
+              width: auto !important;
+              page-break-inside: avoid; 
+              margin: 0 auto; 
+              display: block;
+              object-fit: contain;
+            }
+            iframe, embed { 
+              width: 100% !important; 
+              height: 100% !important; 
+              min-height: 270mm !important;
+            }
             .no-print { display: none !important; }
           }
           body { 
