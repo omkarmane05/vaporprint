@@ -189,6 +189,47 @@ const CustomerUpload = () => {
     }));
   };
 
+  const combineFiles = async () => {
+    if (files.length < 2) return;
+    setLoading(true);
+    setStatus("Combining documents...");
+    
+    try {
+      const mergedPdf = await PDFDocument.create();
+      
+      for (const pf of files) {
+        const arrayBuffer = await pf.file.arrayBuffer();
+        
+        if (pf.file.type === "application/pdf") {
+          const pdf = await PDFDocument.load(arrayBuffer);
+          const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+          copiedPages.forEach(p => mergedPdf.addPage(p));
+        } else if (pf.file.type.startsWith("image/")) {
+          const image = pf.file.type === "image/png" 
+            ? await mergedPdf.embedPng(arrayBuffer)
+            : await mergedPdf.embedJpg(arrayBuffer);
+          
+          const page = mergedPdf.addPage([image.width, image.height]);
+          page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+        }
+      }
+      
+      const pdfBytes = await mergedPdf.save();
+      const combinedFile = new File([pdfBytes], "Combined_Document.pdf", { type: "application/pdf" });
+      
+      // Clear current files and add the new combined one
+      setFiles([]);
+      await handleFiles([combinedFile]);
+      toast.success("Files combined into one PDF!");
+    } catch (err) {
+      console.error("Combination failed:", err);
+      toast.error("Failed to combine files.");
+    } finally {
+      setLoading(false);
+      setStatus(null);
+    }
+  };
+
   const handleUpload = async () => {
     if (files.length === 0) return;
     setLoading(true);
@@ -368,6 +409,18 @@ const CustomerUpload = () => {
           </div>
 
           <div className="space-y-4">
+            {files.length > 1 && (
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                onClick={combineFiles}
+                disabled={loading}
+                className="w-full py-4 rounded-[1.5rem] bg-primary/10 border border-primary/20 text-primary font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-primary/20 transition-all"
+              >
+                <Plus size={16} /> Combine {files.length} files into one print
+              </motion.button>
+            )}
+            
             {files.map((pf) => (
               <motion.div key={pf.id} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="glass-panel p-6 space-y-6 relative border-primary/5">
                 <button onClick={() => removeFile(pf.id)} className="absolute top-4 right-4 text-muted-foreground/40 hover:text-destructive transition-colors">
@@ -468,6 +521,21 @@ const CustomerUpload = () => {
                             </button>
                           ))}
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-[11px] uppercase tracking-widest font-black text-muted-foreground/80">Layout (Pages per Sheet)</span>
+                      <div className="grid grid-cols-4 gap-2 p-1 bg-secondary/60 rounded-2xl">
+                        {[1, 2, 4, 6].map((l) => (
+                          <button
+                            key={l}
+                            onClick={() => updateConfig(pf.id, config.id, { layout: l })}
+                            className={`py-2 rounded-xl text-xs font-black transition-all ${config.layout === l ? "bg-white text-primary shadow-sm border border-primary/5" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
+                          >
+                            {l}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
