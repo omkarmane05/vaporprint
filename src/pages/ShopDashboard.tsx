@@ -368,16 +368,18 @@ const ShopDashboard = () => {
           }
           img { 
             max-width: 100%; 
-            max-height: 90vh; 
-            object-fit: scale-down; 
+            max-height: 95vh; 
+            object-fit: contain; 
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
             border-radius: 12px;
             background: white;
+            display: block;
+            margin: 0 auto;
           }
           iframe, embed {
             width: 100%;
-            max-width: 1000px;
-            height: 90vh;
+            max-width: 900px;
+            height: 95vh;
             border: none;
             border-radius: 12px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
@@ -403,7 +405,7 @@ const ShopDashboard = () => {
         <div class="container">
           ${isImage 
             ? `<img src="${url}" alt="Print Preview">` 
-            : `<iframe src="${url}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf"></iframe>`
+            : `<iframe src="${url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit" type="application/pdf"></iframe>`
           }
         </div>
       `;
@@ -756,17 +758,17 @@ const ShopDashboard = () => {
                 </button>
               </div>
               
-              <div className="flex-1 overflow-auto p-4 bg-muted/30 flex items-center justify-center">
+              <div className="flex-1 overflow-auto p-4 bg-muted/30 flex flex-col items-center">
                 {previewItem.job.fileType.startsWith("image/") ? (
                   <img
                     src={previewItem.url}
                     alt={previewItem.job.fileName}
-                    className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                    className="max-w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-xl"
                   />
                 ) : previewItem.job.fileType === "application/pdf" ? (
                   <iframe
-                    src={previewItem.url}
-                    className="w-full h-[70vh] rounded-lg bg-white"
+                    src={`${previewItem.url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+                    className="w-full max-w-3xl h-[75vh] rounded-lg bg-white shadow-lg border-none"
                     title={previewItem.job.fileName}
                   />
                 ) : (
