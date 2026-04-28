@@ -690,6 +690,24 @@ const ShopDashboard = () => {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
+                        {/* Queue status badge */}
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                          job.status === 'waiting' ? "bg-amber-50 text-amber-600 border-amber-200" :
+                          job.status === 'printing' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                          job.status === 'ready' ? "bg-green-50 text-green-600 border-green-200" :
+                          "bg-slate-50 text-slate-500 border-slate-200"
+                        }`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            job.status === 'waiting' ? "bg-amber-400" :
+                            job.status === 'printing' ? "bg-blue-400 animate-pulse" :
+                            job.status === 'ready' ? "bg-green-400" :
+                            "bg-slate-300"
+                          }`} />
+                          {job.status === 'waiting' ? "QUEUED" :
+                           job.status === 'printing' ? "PRINTING" :
+                           job.status === 'ready' ? "READY" : "DONE"}
+                        </span>
+                      </div>
                         <div className="flex flex-wrap gap-1.5 mt-1">
                           {job.pageRange && (
                             <span className="text-[10px] font-bold bg-primary/5 text-primary border border-primary/10 px-2 py-0.5 rounded-md">Pgs: {job.pageRange}</span>
@@ -722,41 +740,140 @@ const ShopDashboard = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3">
                   {(() => {
                     const hasLocalBlob = receivingProgress[job.id] === 100;
                     const hasStorageUrl = job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME" && job.fileDataUrl.startsWith("http");
                     const isReady = hasLocalBlob || hasStorageUrl;
                     const isStreaming = receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100;
 
-                      return verifyingId === job.id ? (
-                        <div className="flex flex-col gap-3">
-                          <div className="flex gap-3 items-center">
-                            <input autoFocus className="bg-secondary/50 border border-primary/20 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-primary/5 transition-all" placeholder="000000" maxLength={6} value={inputCode} onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handlePrint(job.id, inputCode)} />
-                            <button onClick={() => handlePrint(job.id, inputCode)} className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold">VERIFY</button>
-                            <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                      // Handover verification screen (after OTP entry)
+                      if (verifyingId === job.id && job.status === 'ready') {
+                        return (
+                          <div className="flex flex-col gap-4 w-full">
+                            <div className="flex gap-3 items-center">
+                              <input
+                                autoFocus
+                                className="bg-secondary/50 border border-green-300 rounded-xl px-6 h-14 w-40 text-center font-bold text-lg tracking-[.3em] outline-none focus:ring-4 ring-green-200 transition-all"
+                                placeholder="OTP"
+                                maxLength={4}
+                                value={inputCode}
+                                onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ""))}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && inputCode.length === 4) {
+                                    if (inputCode === job.otp) {
+                                      // Show handover summary (handled below by setting a flag)
+                                      setVerifyingId(`handover-${job.id}`);
+                                      setInputCode("");
+                                    } else {
+                                      toast.error("Wrong OTP. Try again.");
+                                      setInputCode("");
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => {
+                                  if (inputCode === job.otp) {
+                                    setVerifyingId(`handover-${job.id}`);
+                                    setInputCode("");
+                                  } else {
+                                    toast.error("Wrong OTP. Try again.");
+                                    setInputCode("");
+                                  }
+                                }}
+                                disabled={inputCode.length !== 4}
+                                className="bg-green-600 text-white h-14 px-8 rounded-xl font-bold disabled:opacity-30"
+                              >
+                                VERIFY
+                              </button>
+                              <button onClick={() => { setVerifyingId(null); setInputCode(""); }} className="h-14 w-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-black/5 transition-all">✕</button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground italic">Enter the 4-digit OTP the student is showing you.</p>
                           </div>
-                          <div className="flex flex-col gap-3 px-4 py-4 bg-primary/5 rounded-2xl border border-primary/20 animate-in fade-in slide-in-from-top-2 shadow-inner">
-                            <span className="text-[11px] font-black uppercase text-primary/50 tracking-[0.2em]">Print Strategy Configuration:</span>
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span className="text-sm font-black text-primary bg-white px-3 py-1 rounded-lg border border-primary/10 shadow-sm flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${job.colorMode === 'color' ? "bg-amber-400" : "bg-slate-400"}`} />
-                                {job.colorMode === 'color' ? "COLOR" : "B&W"}
-                              </span>
-                              <span className="text-primary/20 font-light text-xl">/</span>
-                              <span className="text-sm font-black text-primary bg-white px-3 py-1 rounded-lg border border-primary/10 shadow-sm">
-                                {job.duplex === 'double' ? "DOUBLE-SIDED" : "SINGLE-SIDED"}
-                              </span>
-                              <span className="text-primary/20 font-light text-xl">/</span>
-                              <span className="text-sm font-black text-primary bg-white px-3 py-1 rounded-lg border border-primary/10 shadow-sm">
-                                {job.layout} PAGE(S) PER SHEET
-                              </span>
+                        );
+                      }
+
+                      // Handover summary screen (OTP verified, confirm handover)
+                      if (verifyingId === `handover-${job.id}`) {
+                        return (
+                          <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-top-2">
+                            <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-5 space-y-4">
+                              <div className="flex items-center gap-3 mb-2">
+                                <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                                  <ShieldCheck className="text-green-600" size={20} />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[3px] text-green-600">OTP VERIFIED ✓</p>
+                                  <p className="text-sm font-bold text-green-800">Handover Summary</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="bg-white rounded-xl p-3 border border-green-200">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Document</p>
+                                  <p className="font-bold truncate">{job.fileName}</p>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-green-200">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Pages</p>
+                                  <p className="font-bold">{job.pageRange || "All"}</p>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-green-200">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Color Mode</p>
+                                  <p className="font-bold flex items-center gap-2">
+                                    <div className={`w-2.5 h-2.5 rounded-full ${job.colorMode === 'color' ? "bg-amber-400" : "bg-slate-400"}`} />
+                                    {job.colorMode === 'color' ? "Color" : "B&W"}
+                                  </p>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-green-200">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sides</p>
+                                  <p className="font-bold">{job.duplex === 'double' ? "Double-Sided" : "Single-Sided"}</p>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-green-200">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Copies</p>
+                                  <p className="font-bold">{job.copies}</p>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-green-200">
+                                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Layout</p>
+                                  <p className="font-bold">{job.layout || 1} per sheet</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-3 pt-2">
+                                <button
+                                  onClick={async () => {
+                                    await removeJob(shopId || "", job.id);
+                                    // Cleanup storage file
+                                    if (job.fileDataUrl && job.fileDataUrl.includes("vprint-uploads")) {
+                                      try {
+                                        const pathMatch = job.fileDataUrl.split("/vprint-uploads/")[1];
+                                        if (pathMatch) supabase.storage.from("vprint-uploads").remove([decodeURIComponent(pathMatch)]);
+                                      } catch { /* best effort */ }
+                                    }
+                                    delete receivedFiles.current[job.id];
+                                    setVerifyingId(null);
+                                    fetchJobs();
+                                    toast.success("Handover complete! Document vaporized.");
+                                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                                  }}
+                                  className="flex-1 bg-green-600 text-white h-14 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-green-500/20"
+                                >
+                                  <ShieldCheck size={18} />
+                                  CONFIRM HANDOVER & VAPORIZE
+                                </button>
+                                <button
+                                  onClick={() => { setVerifyingId(null); }}
+                                  className="h-14 px-6 rounded-xl bg-secondary text-muted-foreground font-bold hover:bg-black/5 transition-all"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <>
+                        );
+                      }
+
+                      // Normal action buttons
+                      return (
+                        <div className="flex items-center gap-3">
                           <button
                             onClick={() => handlePreview(job)}
                             disabled={!isReady}
@@ -765,49 +882,49 @@ const ShopDashboard = () => {
                             <Eye size={16} />
                             Preview
                           </button>
-                          
-                          {/* Queue-based flow */}
+
+                          {/* Step 1: PRINT JOB — opens blob print window */}
                           {job.status === 'waiting' && (
                             <button
-                              onClick={() => { handleMarkPrinting(job); setVerifyingId(job.id); }}
+                              onClick={async () => {
+                                // Mark as printing first
+                                await handleMarkPrinting(job);
+                                // Open the document for actual printing (blob print)
+                                handlePrint(job.id, job.code);
+                              }}
                               disabled={!isReady}
                               className="bg-blue-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:grayscale"
                             >
                               <Printer size={16} />
-                              PRINT JOB
+                              {isStreaming ? "STREAMING..." : isReady ? "PRINT JOB" : "UPLOADING..."}
                             </button>
                           )}
+
+                          {/* Step 2: MARK READY — generates OTP for student */}
                           {job.status === 'printing' && (
                             <button
                               onClick={() => handleMarkReady(job)}
-                              className="bg-green-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-green-500/20 animate-pulse"
+                              className="bg-green-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-green-500/20"
                             >
                               <ShieldCheck size={16} />
                               MARK READY
                             </button>
                           )}
+
+                          {/* Step 3: VERIFY OTP — enter OTP for handover */}
                           {job.status === 'ready' && job.otp && (
-                            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 h-14">
-                              <span className="text-[10px] font-black text-green-600 uppercase">OTP:</span>
-                              <span className="text-lg font-black text-green-700 tracking-[4px] font-mono">{job.otp}</span>
-                            </div>
+                            <button
+                              onClick={() => { setVerifyingId(job.id); setInputCode(""); }}
+                              className="bg-green-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-green-500/20"
+                            >
+                              <ShieldCheck size={16} />
+                              ENTER OTP & HANDOVER
+                            </button>
                           )}
 
-                          {/* Legacy code-based release (fallback) */}
-                          {!job.status || job.status === 'waiting' ? (
-                            <button
-                              onClick={() => setVerifyingId(job.id)}
-                              disabled={!isReady}
-                              className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
-                            >
-                              <ShieldCheck size={18} />
-                              {isStreaming ? "STREAMING..." : isReady ? "RELEASE PRINT" : "UPLOADING..."}
-                            </button>
-                          ) : null}
-
-                        <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
-                      </>
-                    );
+                          <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
+                        </div>
+                      );
                   })()}
                 </div>
               </motion.div>
