@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export type JobStatus = 'waiting' | 'printing' | 'ready' | 'done';
+
 export interface PrintJob {
   id: string;
   fileName: string;
@@ -14,6 +16,9 @@ export interface PrintJob {
   colorMode?: 'color' | 'bw';
   duplex?: 'single' | 'double';
   layout?: number; // pages per sheet
+  status: JobStatus;
+  otp?: string;
+  studentId?: string;
 }
 
 function rowToJob(row: any): PrintJob {
@@ -31,6 +36,9 @@ function rowToJob(row: any): PrintJob {
     colorMode: row.color_mode,
     duplex: row.duplex,
     layout: row.layout,
+    status: row.status || 'waiting',
+    otp: row.otp,
+    studentId: row.student_id,
   };
 }
 
@@ -60,6 +68,8 @@ export async function addJob(shopId: string, job: PrintJob) {
     color_mode: job.colorMode,
     duplex: job.duplex,
     layout: job.layout,
+    status: job.status || 'waiting',
+    student_id: job.studentId || null,
   });
   if (error) {
     throw error;
@@ -99,6 +109,55 @@ export async function verifyAndPrint(shopId: string, jobId: string, code: string
   await supabase.from("print_jobs").delete().eq("id", jobId);
 
   return job;
+}
+
+// --- Queue System Functions ---
+
+export function generatePickupOTP(): string {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+export async function updateJobStatus(shopId: string, jobId: string, status: JobStatus, otp?: string) {
+  const updates: Record<string, any> = { status };
+  if (otp) updates.otp = otp;
+  
+  const { error } = await supabase
+    .from("print_jobs")
+    .update(updates)
+    .eq("id", jobId)
+    .eq("shop_id", shopId);
+  
+  if (error) throw error;
+}
+
+export async function verifyPickupOTP(shopId: string, otp: string): Promise<PrintJob | null> {
+  const { data, error } = await supabase
+    .from("print_jobs")
+    .select("*")
+    .eq("shop_id", shopId)
+    .eq("status", "ready")
+    .eq("otp", otp)
+    .single();
+
+  if (error || !data) return null;
+
+  const job = rowToJob(data);
+
+  // Vaporize after successful pickup
+  await supabase.from("print_jobs").delete().eq("id", data.id);
+
+  return job;
+}
+
+export async function getStudentJobs(studentId: string): Promise<PrintJob[]> {
+  const { data, error } = await supabase
+    .from("print_jobs")
+    .select("*")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return (data || []).map(rowToJob);
 }
 
 // NOTE: Auto-expiry is now handled by the cleanup_expired_jobs RPC

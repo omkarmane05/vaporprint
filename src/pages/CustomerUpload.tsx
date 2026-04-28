@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2 } from "lucide-react";
-import { addJob, generateId, generateCode } from "@/lib/printQueue";
+import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2, Clock, CheckCircle } from "lucide-react";
+import { addJob, generateId, generateCode, type PrintJob, type JobStatus } from "@/lib/printQueue";
 import { supabase } from "@/integrations/supabase/client";
 import { Peer } from "peerjs";
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import { toast } from "sonner";
+import type { User } from "@supabase/supabase-js";
 
 // Use a more stable worker URL
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -40,6 +41,61 @@ const CustomerUpload = () => {
   const [isVerifying, setIsVerifying] = useState(true);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auth state
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Queue tracking state
+  const [trackingJobs, setTrackingJobs] = useState<PrintJob[]>([]);
+  const [isTracking, setIsTracking] = useState(false);
+
+  // Check auth on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Poll for job status updates when tracking
+  useEffect(() => {
+    if (!isTracking || !user) return;
+    const poll = async () => {
+      const { data } = await supabase
+        .from("print_jobs")
+        .select("*")
+        .eq("student_id", user.id)
+        .order("created_at", { ascending: false });
+      if (data) {
+        setTrackingJobs(data.map((row: any) => ({
+          id: row.id, fileName: row.file_name, fileType: row.file_type,
+          fileSize: row.file_size, fileDataUrl: row.file_data_url,
+          copies: row.copies, code: row.code,
+          timestamp: new Date(row.created_at).getTime(),
+          shopId: row.shop_id, pageRange: row.page_range,
+          colorMode: row.color_mode, duplex: row.duplex,
+          layout: row.layout, status: row.status || 'waiting',
+          otp: row.otp, studentId: row.student_id,
+        })));
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
+  }, [isTracking, user]);
+
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href },
+    });
+    if (error) toast.error("Login failed: " + error.message);
+  };
 
   useEffect(() => {
     const fetchShop = async () => {
@@ -279,6 +335,8 @@ const CustomerUpload = () => {
             colorMode: config.colorMode,
             duplex: config.duplex,
             layout: config.layout,
+            status: 'waiting',
+            studentId: user?.id,
           });
 
           // Step 2: Upload to Supabase Storage
@@ -332,6 +390,7 @@ const CustomerUpload = () => {
       setStatus("All documents uploaded ✓");
       setLoading(false);
       setStatus(null);
+      if (user) setIsTracking(true); // Start tracking if logged in
       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
     } catch (err: any) {
       console.error("[Upload Error]", err);
@@ -342,6 +401,55 @@ const CustomerUpload = () => {
 
   if (code) {
     const isTransferred = !loading && !status;
+
+    // If tracking is active and jobs exist, show live tracking
+    if (isTracking && trackingJobs.length > 0) {
+      return (
+        <div className="min-h-svh flex items-center justify-center p-6 bg-background">
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center glass-panel p-12 max-w-md w-full space-y-6">
+            <p className="text-muted-foreground font-medium italic text-sm">Station: {shopName || shopId}</p>
+            <h2 className="text-3xl font-extrabold tracking-tight">Your Print Queue</h2>
+
+            <div className="space-y-4 text-left">
+              {trackingJobs.map((job) => {
+                const statusConfig: Record<string, { icon: any; label: string; color: string; bg: string }> = {
+                  waiting: { icon: Clock, label: "Waiting in Queue", color: "text-amber-600", bg: "bg-amber-50 border-amber-200" },
+                  printing: { icon: Printer, label: "Printing Now...", color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
+                  ready: { icon: CheckCircle, label: "Ready for Pickup!", color: "text-green-600", bg: "bg-green-50 border-green-200" },
+                  done: { icon: ShieldCheck, label: "Completed", color: "text-muted-foreground", bg: "bg-secondary border-border" },
+                };
+                const s = statusConfig[job.status] || statusConfig.waiting;
+                const Icon = s.icon;
+                return (
+                  <motion.div key={job.id} layout className={`p-5 rounded-2xl border ${s.bg} transition-all`}>
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color} bg-white/60`}>
+                        <Icon size={20} className={job.status === 'printing' ? 'animate-pulse' : ''} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm truncate">{job.fileName}</p>
+                        <p className={`text-[10px] font-black uppercase tracking-widest ${s.color}`}>{s.label}</p>
+                      </div>
+                    </div>
+                    {job.status === 'ready' && job.otp && (
+                      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-3 p-4 bg-white rounded-xl border border-green-200 text-center">
+                        <p className="text-[10px] uppercase tracking-[4px] font-black text-green-600 mb-1">YOUR PICKUP OTP</p>
+                        <h3 className="text-4xl font-black tracking-[8px] text-green-700 font-mono">{job.otp}</h3>
+                        <p className="text-[10px] text-muted-foreground mt-2">Show this OTP to the shop owner & pay at counter</p>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <p className="text-[10px] text-muted-foreground opacity-50 font-medium">Auto-refreshing • No need to wait at the shop!</p>
+          </motion.div>
+        </div>
+      );
+    }
+
+    // Fallback: show old code screen (for non-logged-in users)
     return (
       <div className="min-h-svh flex items-center justify-center p-6 bg-background">
         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center glass-panel p-16 max-w-sm w-full">
@@ -375,6 +483,38 @@ const CustomerUpload = () => {
     );
   }
 
+  // Google login gate
+  if (authLoading) {
+    return <div className="min-h-svh flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary" size={32} /></div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-svh flex items-center justify-center p-6 bg-background">
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="text-center glass-panel p-12 max-w-sm w-full space-y-8">
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto pastel-lavender border border-primary/20">
+            <Printer className="text-primary" size={32} />
+          </div>
+          <div>
+            <p className="text-primary text-sm font-black uppercase tracking-[0.4em] mb-2 opacity-80">
+              {isVerifying ? "Locating Hub..." : (shopName || "VaporPrint Station")}
+            </p>
+            <h1 className="text-3xl font-extrabold tracking-tighter italic">Sign In to Print</h1>
+            <p className="text-muted-foreground text-sm mt-2 font-light">Sign in to upload documents and track your print status live.</p>
+          </div>
+          <button
+            onClick={handleGoogleLogin}
+            className="w-full bg-white border-2 border-border hover:border-primary/30 rounded-2xl h-14 font-bold text-sm flex items-center justify-center gap-3 transition-all hover:shadow-lg active:scale-95"
+          >
+            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Continue with Google
+          </button>
+          <p className="text-[10px] text-muted-foreground opacity-40 uppercase tracking-widest font-bold">Privacy-First • Zero Storage</p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-svh p-6 flex flex-col items-center justify-start bg-background">
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl space-y-10">
@@ -386,6 +526,7 @@ const CustomerUpload = () => {
             {isVerifying ? "Locating Hub..." : (shopName || "VaporPrint Station")}
           </p>
           <h1 className="text-4xl font-extrabold tracking-tighter italic opacity-90">Upload Center</h1>
+          <p className="text-xs text-muted-foreground mt-2">Signed in as <span className="font-bold text-primary">{user.email}</span></p>
         </header>
 
         <div className="space-y-6">

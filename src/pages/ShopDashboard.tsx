@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut, Eye, X } from "lucide-react";
 import { type PrintJob } from "@/lib/printQueue";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
-import { verifyAndPrint, removeJob } from "@/lib/printQueue";
+import { verifyAndPrint, removeJob, updateJobStatus, generatePickupOTP, verifyPickupOTP } from "@/lib/printQueue";
 import { toast } from "sonner";
 import { Peer } from "peerjs";
 import { supabase } from "@/integrations/supabase/client";
@@ -510,6 +510,51 @@ const ShopDashboard = () => {
     setMasterOtp("");
   };
 
+  // --- Queue System Handlers ---
+  const handleMarkPrinting = async (job: PrintJob) => {
+    try {
+      await updateJobStatus(shopId || "", job.id, 'printing');
+      toast.success(`Printing: ${job.fileName}`);
+      fetchJobs();
+    } catch (err) {
+      toast.error("Failed to update status.");
+    }
+  };
+
+  const handleMarkReady = async (job: PrintJob) => {
+    try {
+      const otp = generatePickupOTP();
+      await updateJobStatus(shopId || "", job.id, 'ready', otp);
+      toast.success(`Ready! OTP: ${otp}`);
+      fetchJobs();
+    } catch (err) {
+      toast.error("Failed to mark as ready.");
+    }
+  };
+
+  const handlePickupVerify = async (otp: string) => {
+    if (otp.length !== 4) return;
+    try {
+      const job = await verifyPickupOTP(shopId || "", otp);
+      if (job) {
+        toast.success(`Handed over: ${job.fileName}`);
+        // Cleanup storage file
+        if (job.fileDataUrl && job.fileDataUrl.includes("vprint-uploads")) {
+          try {
+            const pathMatch = job.fileDataUrl.split("/vprint-uploads/")[1];
+            if (pathMatch) supabase.storage.from("vprint-uploads").remove([decodeURIComponent(pathMatch)]);
+          } catch { /* best effort */ }
+        }
+        delete receivedFiles.current[job.id];
+        fetchJobs();
+      } else {
+        toast.error("Invalid OTP.");
+      }
+    } catch {
+      toast.error("Verification failed.");
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setIsAuthenticated(false);
@@ -721,14 +766,44 @@ const ShopDashboard = () => {
                             Preview
                           </button>
                           
-                          <button
-                            onClick={() => setVerifyingId(job.id)}
-                            disabled={!isReady}
-                            className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
-                          >
-                          <ShieldCheck size={18} />
-                          {isStreaming ? "STREAMING..." : isReady ? "RELEASE PRINT" : "UPLOADING..."}
-                        </button>
+                          {/* Queue-based flow */}
+                          {job.status === 'waiting' && (
+                            <button
+                              onClick={() => { handleMarkPrinting(job); setVerifyingId(job.id); }}
+                              disabled={!isReady}
+                              className="bg-blue-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:grayscale"
+                            >
+                              <Printer size={16} />
+                              PRINT JOB
+                            </button>
+                          )}
+                          {job.status === 'printing' && (
+                            <button
+                              onClick={() => handleMarkReady(job)}
+                              className="bg-green-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-green-500/20 animate-pulse"
+                            >
+                              <ShieldCheck size={16} />
+                              MARK READY
+                            </button>
+                          )}
+                          {job.status === 'ready' && job.otp && (
+                            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 h-14">
+                              <span className="text-[10px] font-black text-green-600 uppercase">OTP:</span>
+                              <span className="text-lg font-black text-green-700 tracking-[4px] font-mono">{job.otp}</span>
+                            </div>
+                          )}
+
+                          {/* Legacy code-based release (fallback) */}
+                          {!job.status || job.status === 'waiting' ? (
+                            <button
+                              onClick={() => setVerifyingId(job.id)}
+                              disabled={!isReady}
+                              className="bg-primary text-primary-foreground h-14 px-8 rounded-xl font-bold flex items-center gap-3 transition-all hover:brightness-105 active:scale-95 shadow-lg shadow-primary/20 hover:tracking-wide disabled:opacity-30 disabled:grayscale"
+                            >
+                              <ShieldCheck size={18} />
+                              {isStreaming ? "STREAMING..." : isReady ? "RELEASE PRINT" : "UPLOADING..."}
+                            </button>
+                          ) : null}
 
                         <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
                       </>

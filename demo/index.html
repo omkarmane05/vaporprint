@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VaporPrint Queue Demo</title>
+  <meta name="description" content="VaporPrint Queue System Demo - McDonald's Display Method with OTP verification" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Landing / Role Selection -->
+  <div id="role-select" class="screen active">
+    <div class="role-container">
+      <div class="logo-icon pulse-glow">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </div>
+      <h1 class="hero-title">Vapor<span class="gradient-text">Print</span></h1>
+      <p class="hero-subtitle">Queue System Demo</p>
+      <p class="hero-desc">Experience the McDonald's Display method — upload from anywhere, pick up when ready.</p>
+      
+      <div class="role-buttons">
+        <button id="btn-student" class="btn btn-primary btn-lg" onclick="showScreen('student-upload')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          I'm a Student
+        </button>
+        <button id="btn-owner" class="btn btn-secondary btn-lg" onclick="showScreen('owner-dashboard')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          I'm a Shop Owner
+        </button>
+      </div>
+      <p class="hint-text">Open two tabs to simulate both sides simultaneously!</p>
+    </div>
+  </div>
+
+  <!-- Student Upload Screen -->
+  <div id="student-upload" class="screen">
+    <div class="page-container">
+      <button class="back-btn" onclick="showScreen('role-select')">← Back</button>
+      <header class="page-header">
+        <div class="header-icon lavender">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <p class="station-label">CAMPUS PRINT HUB</p>
+        <h1 class="page-title">Upload Center</h1>
+      </header>
+
+      <!-- Drop Zone -->
+      <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" multiple hidden />
+        <div class="drop-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <p class="drop-text"><span class="text-primary">Click or drop</span> documents here</p>
+        <p class="drop-hint">PDF, Images, Documents supported</p>
+      </div>
+
+      <!-- File List -->
+      <div id="file-list" class="file-list"></div>
+
+      <!-- Config Section (shows after file upload) -->
+      <div id="config-section" class="config-section hidden">
+        <div class="config-card">
+          <h3 class="config-title">Print Configuration</h3>
+          <div class="config-grid">
+            <div class="config-item">
+              <label class="config-label">COLOR MODE</label>
+              <div class="toggle-group">
+                <button class="toggle-btn active" data-config="colorMode" data-value="bw" onclick="setConfig(this)">B&W</button>
+                <button class="toggle-btn" data-config="colorMode" data-value="color" onclick="setConfig(this)">COLOR</button>
+              </div>
+            </div>
+            <div class="config-item">
+              <label class="config-label">SIDES</label>
+              <div class="toggle-group">
+                <button class="toggle-btn active" data-config="duplex" data-value="single" onclick="setConfig(this)">1-SIDE</button>
+                <button class="toggle-btn" data-config="duplex" data-value="double" onclick="setConfig(this)">2-SIDE</button>
+              </div>
+            </div>
+            <div class="config-item full-width">
+              <label class="config-label">COPIES</label>
+              <div class="copies-control">
+                <button class="copy-btn" onclick="changeCopies(-1)">−</button>
+                <span id="copies-count" class="copies-count">1</span>
+                <button class="copy-btn" onclick="changeCopies(1)">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button id="send-btn" class="btn btn-primary btn-block" onclick="sendToPrint()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          SEND TO PRINT & PAY AT SHOP
+        </button>
+        <p class="ephemeral-text">Zero-download secure transfer</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Tracking Screen -->
+  <div id="student-tracking" class="screen">
+    <div class="tracking-container">
+      <div class="tracking-card">
+        <div id="tracking-icon" class="tracking-status-icon waiting">
+          <svg id="icon-waiting" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <svg id="icon-printing" class="hidden" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          <svg id="icon-ready" class="hidden" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+
+        <p class="tracking-station">Station: Campus Print Hub</p>
+        <h2 id="tracking-order-num" class="tracking-order-number">#--</h2>
+        
+        <div id="tracking-status-section">
+          <div id="status-waiting" class="status-block">
+            <div class="status-badge waiting-badge">
+              <div class="pulse-dot yellow"></div>
+              WAITING IN QUEUE
+            </div>
+            <p id="queue-position" class="queue-info">Calculating position...</p>
+            <div class="progress-bar-bg">
+              <div id="queue-progress" class="progress-bar-fill"></div>
+            </div>
+          </div>
+
+          <div id="status-printing" class="status-block hidden">
+            <div class="status-badge printing-badge">
+              <div class="pulse-dot blue"></div>
+              PRINTING NOW...
+            </div>
+            <div class="printing-animation">
+              <div class="print-bar"></div>
+              <div class="print-bar delay-1"></div>
+              <div class="print-bar delay-2"></div>
+            </div>
+          </div>
+
+          <div id="status-ready" class="status-block hidden">
+            <div class="status-badge ready-badge">
+              <div class="pulse-dot green"></div>
+              READY FOR PICKUP!
+            </div>
+            <div class="otp-section">
+              <p class="otp-label">YOUR PICKUP OTP</p>
+              <h1 id="otp-display" class="otp-number">----</h1>
+              <p class="otp-hint">Show this OTP to the shop owner to collect your document.</p>
+              <div class="payment-reminder">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Pay ₹<span id="price-display">0</span> at the counter (Cash / UPI)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tracking-footer">
+          <p class="tracking-hint">You'll be notified when your document is ready. No need to wait at the shop!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shop Owner Dashboard -->
+  <div id="owner-dashboard" class="screen">
+    <div class="dashboard-container">
+      <button class="back-btn" onclick="showScreen('role-select')">← Back</button>
+      
+      <header class="dashboard-header">
+        <div class="dash-title-row">
+          <div class="header-icon lavender">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          </div>
+          <div>
+            <h1 class="dash-title">Queue</h1>
+            <p class="dash-subtitle">Station: <span class="text-primary mono">campus-hub-01</span></p>
+          </div>
+        </div>
+        <div class="live-badge">
+          <div class="pulse-dot green"></div>
+          LIVE
+        </div>
+      </header>
+
+      <!-- OTP Quick Release -->
+      <div class="master-otp-bar">
+        <div class="otp-input-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          <input id="master-otp-input" type="text" placeholder="ENTER OTP TO HAND OVER DOCUMENT..." maxlength="4" oninput="handleMasterOTP(this)" />
+        </div>
+        <button id="master-verify-btn" class="btn btn-primary" onclick="verifyMasterOTP()" disabled>VERIFY & RELEASE</button>
+      </div>
+
+      <!-- Queue List -->
+      <div id="queue-list" class="queue-list">
+        <div class="empty-queue">
+          <p>Waiting for print jobs...</p>
+          <p class="hint-text">Switch to the Student tab and upload a file to see it appear here.</p>
+        </div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-value" id="stat-waiting">0</span>
+          <span class="stat-label">Waiting</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-printing">0</span>
+          <span class="stat-label">Printing</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-ready">0</span>
+          <span class="stat-label">Ready</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-done">0</span>
+          <span class="stat-label">Completed</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
