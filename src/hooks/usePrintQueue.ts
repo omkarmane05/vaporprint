@@ -20,6 +20,8 @@ function rowToJob(row: any): PrintJob {
     status: row.status || 'waiting',
     otp: row.otp,
     studentId: row.student_id,
+    tokenNumber: row.token_number,
+    paymentStatus: row.payment_status || 'pending',
   };
 }
 
@@ -30,7 +32,7 @@ export function usePrintQueue(shopId: string): { jobs: PrintJob[]; fetchJobs: ()
     if (!shopId) return;
     const { data } = await supabase
       .from("print_jobs")
-      .select("id, file_name, file_type, file_size, file_data_url, copies, code, created_at, shop_id, page_range, color_mode, duplex, layout, status, otp, student_id")
+      .select("id, file_name, file_type, file_size, file_data_url, copies, code, created_at, shop_id, page_range, color_mode, duplex, layout, status, otp, student_id, token_number, payment_status")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false });
     setJobs((data || []).map(rowToJob));

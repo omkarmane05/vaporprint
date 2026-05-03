@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2, Clock, CheckCircle } from "lucide-react";
-import { addJob, generateId, generateCode, type PrintJob, type JobStatus } from "@/lib/printQueue";
+import { Upload, ShieldCheck, Printer, Minus, Plus, Loader2, Clock, CheckCircle, IndianRupee, CreditCard } from "lucide-react";
+import { addJob, generateId, generateCode, getNextTokenNumber, markPaymentDone, type PrintJob, type JobStatus } from "@/lib/printQueue";
 import { supabase } from "@/integrations/supabase/client";
 import { Peer } from "peerjs";
 import * as pdfjsLib from 'pdfjs-dist';
@@ -81,6 +81,8 @@ const CustomerUpload = () => {
           colorMode: row.color_mode, duplex: row.duplex,
           layout: row.layout, status: row.status || 'waiting',
           otp: row.otp, studentId: row.student_id,
+          tokenNumber: row.token_number,
+          paymentStatus: row.payment_status || 'pending',
         })));
       }
     };
@@ -320,6 +322,9 @@ const CustomerUpload = () => {
           const safeShopId = shopId?.toLowerCase() || "";
           const storagePath = `${safeShopId}/${jobId}/${printFile.file.name}`;
 
+          // Get sequential token number (McDonald's style)
+          const tokenNumber = await getNextTokenNumber(safeShopId);
+
           // Step 1: Add job to DB queue
           await addJob(safeShopId, {
             id: jobId,
@@ -337,6 +342,8 @@ const CustomerUpload = () => {
             layout: config.layout,
             status: 'waiting',
             studentId: user?.id,
+            tokenNumber,
+            paymentStatus: 'pending',
           });
 
           // Step 2: Upload to Supabase Storage
@@ -408,34 +415,66 @@ const CustomerUpload = () => {
         <div className="min-h-svh flex items-center justify-center p-6 bg-background">
           <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center glass-panel p-12 max-w-md w-full space-y-6">
             <p className="text-muted-foreground font-medium italic text-sm">Station: {shopName || shopId}</p>
-            <h2 className="text-3xl font-extrabold tracking-tight">Your Print Queue</h2>
+            <h2 className="text-3xl font-extrabold tracking-tight">Your Orders</h2>
 
             <div className="space-y-4 text-left">
               {trackingJobs.map((job) => {
                 const statusConfig: Record<string, { icon: any; label: string; color: string; bg: string }> = {
-                  waiting: { icon: Clock, label: "Waiting in Queue", color: "text-amber-600", bg: "bg-amber-50 border-amber-200" },
+                  waiting: { icon: Clock, label: job.paymentStatus === 'paid' ? "Waiting in Queue" : "Payment Pending", color: job.paymentStatus === 'paid' ? "text-amber-600" : "text-orange-600", bg: job.paymentStatus === 'paid' ? "bg-amber-50 border-amber-200" : "bg-orange-50 border-orange-300" },
                   printing: { icon: Printer, label: "Printing Now...", color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
                   ready: { icon: CheckCircle, label: "Ready for Pickup!", color: "text-green-600", bg: "bg-green-50 border-green-200" },
                   done: { icon: ShieldCheck, label: "Completed", color: "text-muted-foreground", bg: "bg-secondary border-border" },
                 };
                 const s = statusConfig[job.status] || statusConfig.waiting;
                 const Icon = s.icon;
+                const isPaid = job.paymentStatus === 'paid';
                 return (
                   <motion.div key={job.id} layout className={`p-5 rounded-2xl border ${s.bg} transition-all`}>
                     <div className="flex items-center gap-4 mb-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color} bg-white/60`}>
-                        <Icon size={20} className={job.status === 'printing' ? 'animate-pulse' : ''} />
+                      {/* Token Number - The Big McDonald's Number */}
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl ${s.color} bg-white/80 border-2 ${s.bg.split(' ')[1] || 'border-border'} shadow-sm`}>
+                        #{String(job.tokenNumber || 0).padStart(2, '0')}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm truncate">{job.fileName}</p>
                         <p className={`text-[10px] font-black uppercase tracking-widest ${s.color}`}>{s.label}</p>
                       </div>
                     </div>
+
+                    {/* Payment Done Button (only for unpaid waiting jobs) */}
+                    {job.status === 'waiting' && !isPaid && (
+                      <motion.button
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        onClick={async () => {
+                          const success = await markPaymentDone(job.id);
+                          if (success) {
+                            toast.success("Payment confirmed! Your order is now in the queue.");
+                            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                          } else {
+                            toast.error("Failed to confirm payment. Try again.");
+                          }
+                        }}
+                        className="w-full mt-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white h-14 rounded-2xl font-bold text-sm flex items-center justify-center gap-3 transition-all hover:brightness-110 active:scale-[0.98] shadow-lg shadow-green-500/20"
+                      >
+                        <IndianRupee size={18} />
+                        I HAVE PAID
+                      </motion.button>
+                    )}
+
+                    {/* Payment confirmed badge */}
+                    {job.status === 'waiting' && isPaid && (
+                      <div className="mt-3 flex items-center gap-2 justify-center py-2 px-4 bg-green-100 border border-green-300 rounded-xl">
+                        <CreditCard size={14} className="text-green-600" />
+                        <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Payment Confirmed ✓</span>
+                      </div>
+                    )}
+
                     {job.status === 'ready' && job.otp && (
                       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-3 p-4 bg-white rounded-xl border border-green-200 text-center">
                         <p className="text-[10px] uppercase tracking-[4px] font-black text-green-600 mb-1">YOUR PICKUP OTP</p>
                         <h3 className="text-4xl font-black tracking-[8px] text-green-700 font-mono">{job.otp}</h3>
-                        <p className="text-[10px] text-muted-foreground mt-2">Show this OTP to the shop owner & pay at counter</p>
+                        <p className="text-[10px] text-muted-foreground mt-2">Show this OTP to the shop owner to collect your print</p>
                       </motion.div>
                     )}
                   </motion.div>

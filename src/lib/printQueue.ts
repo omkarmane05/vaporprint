@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type JobStatus = 'waiting' | 'printing' | 'ready' | 'done';
+export type PaymentStatus = 'pending' | 'paid';
 
 export interface PrintJob {
   id: string;
@@ -19,6 +20,8 @@ export interface PrintJob {
   status: JobStatus;
   otp?: string;
   studentId?: string;
+  tokenNumber?: number;
+  paymentStatus: PaymentStatus;
 }
 
 function rowToJob(row: any): PrintJob {
@@ -39,6 +42,8 @@ function rowToJob(row: any): PrintJob {
     status: row.status || 'waiting',
     otp: row.otp,
     studentId: row.student_id,
+    tokenNumber: row.token_number,
+    paymentStatus: row.payment_status || 'pending',
   };
 }
 
@@ -52,6 +57,16 @@ export function generateShopId(): string {
 
 export function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Get the next sequential token number for a shop (resets daily)
+export async function getNextTokenNumber(shopId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("get_next_token", { p_shop_id: shopId });
+  if (error || !data) {
+    // Fallback: generate a random 2-digit number if RPC fails
+    return Math.floor(Math.random() * 99) + 1;
+  }
+  return data as number;
 }
 
 export async function addJob(shopId: string, job: PrintJob) {
@@ -70,6 +85,8 @@ export async function addJob(shopId: string, job: PrintJob) {
     layout: job.layout,
     status: job.status || 'waiting',
     student_id: job.studentId || null,
+    token_number: job.tokenNumber || null,
+    payment_status: job.paymentStatus || 'pending',
   });
   if (error) {
     throw error;
@@ -158,6 +175,17 @@ export async function getStudentJobs(studentId: string): Promise<PrintJob[]> {
 
   if (error) return [];
   return (data || []).map(rowToJob);
+}
+
+// --- Payment Functions ---
+
+export async function markPaymentDone(jobId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("print_jobs")
+    .update({ payment_status: 'paid' })
+    .eq("id", jobId);
+
+  return !error;
 }
 
 // NOTE: Auto-expiry is now handled by the cleanup_expired_jobs RPC

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut, Eye, X } from "lucide-react";
+import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut, Eye, X, IndianRupee, Ban } from "lucide-react";
 import { type PrintJob } from "@/lib/printQueue";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
 import { verifyAndPrint, removeJob, updateJobStatus, generatePickupOTP, verifyPickupOTP } from "@/lib/printQueue";
@@ -684,11 +684,18 @@ const ShopDashboard = () => {
             {jobs.map((job) => (
               <motion.div key={job.id} layout initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="glass-panel p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 hover:shadow-2xl transition-all">
                 <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 rounded-2xl pastel-lavender flex items-center justify-center border border-primary/10 flex-shrink-0"><FileText className="text-primary/60" size={28} /></div>
+                  {/* Token Number Circle (McDonald's style) */}
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border-2 flex-shrink-0 font-black text-xl ${
+                    job.paymentStatus === 'paid'
+                      ? 'bg-primary/5 border-primary/20 text-primary'
+                      : 'bg-orange-50 border-orange-300 text-orange-600'
+                  }`}>
+                    #{String(job.tokenNumber || 0).padStart(2, '0')}
+                  </div>
                   <div>
                     <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
                         {/* Queue status badge */}
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 ${
@@ -706,6 +713,15 @@ const ShopDashboard = () => {
                           {job.status === 'waiting' ? "QUEUED" :
                            job.status === 'printing' ? "PRINTING" :
                            job.status === 'ready' ? "READY" : "DONE"}
+                        </span>
+                        {/* Payment status badge */}
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                          job.paymentStatus === 'paid'
+                            ? 'bg-green-50 text-green-600 border-green-200'
+                            : 'bg-red-50 text-red-500 border-red-200'
+                        }`}>
+                          <IndianRupee size={10} />
+                          {job.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
                         </span>
                       </div>
                         <div className="flex flex-wrap gap-1.5 mt-1">
@@ -883,20 +899,31 @@ const ShopDashboard = () => {
                             Preview
                           </button>
 
-                          {/* Step 1: PRINT JOB — opens blob print window */}
+                          {/* Step 1: PRINT JOB — opens blob print window (BLOCKED if unpaid) */}
                           {job.status === 'waiting' && (
                             <button
                               onClick={async () => {
+                                if (job.paymentStatus !== 'paid') {
+                                  toast.error("Cannot print — student hasn't confirmed payment yet.");
+                                  return;
+                                }
                                 // Mark as printing first
                                 await handleMarkPrinting(job);
                                 // Open the document for actual printing (blob print)
                                 handlePrint(job.id, job.code);
                               }}
-                              disabled={!isReady}
-                              className="bg-blue-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:grayscale"
+                              disabled={!isReady || job.paymentStatus !== 'paid'}
+                              className={`h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg disabled:opacity-30 disabled:grayscale ${
+                                job.paymentStatus !== 'paid'
+                                  ? 'bg-slate-400 text-white shadow-slate-300/20 cursor-not-allowed'
+                                  : 'bg-blue-600 text-white shadow-blue-500/20 hover:brightness-110'
+                              }`}
                             >
-                              <Printer size={16} />
-                              {isStreaming ? "STREAMING..." : isReady ? "PRINT JOB" : "UPLOADING..."}
+                              {job.paymentStatus !== 'paid' ? (
+                                <><Ban size={16} /> AWAITING PAYMENT</>
+                              ) : (
+                                <><Printer size={16} /> {isStreaming ? "STREAMING..." : isReady ? "PRINT JOB" : "UPLOADING..."}</>
+                              )}
                             </button>
                           )}
 
