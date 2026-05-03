@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Clock, FileText, ShieldCheck, Printer, Copy, Trash2, Lock, Shield, Loader2, Radio, Mail, LogOut, Eye, X, IndianRupee, Ban } from "lucide-react";
 import { type PrintJob } from "@/lib/printQueue";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
-import { verifyAndPrint, removeJob, updateJobStatus, generatePickupOTP, verifyPickupOTP } from "@/lib/printQueue";
+import { removeJob, updateJobStatus, generatePickupOTP, verifyPickupOTP } from "@/lib/printQueue";
 import { toast } from "sonner";
 import { Peer } from "peerjs";
 import { supabase } from "@/integrations/supabase/client";
@@ -270,14 +270,10 @@ const ShopDashboard = () => {
     return () => clearInterval(pollInterval);
   }, [jobs, fetchJobs]);
 
-  const handlePrint = async (jobId: string, directCode?: string) => {
-    const activeCode = directCode || inputCode;
-
-    if (!activeCode || activeCode.length < 4) {
-      toast.error("Please enter the verification code.");
-      return;
-    }
-
+  // Opens a document for printing WITHOUT deleting it from the database.
+  // The job stays in the queue so the owner can progress through:
+  // printing → mark ready → OTP handover → THEN vaporize.
+  const openForPrinting = async (job: PrintJob) => {
     // PRE-EMPTIVE POPUP AVOIDANCE: Open window immediately on user-thread
     const printWindow = window.open("about:blank", "_blank");
     if (!printWindow) {
@@ -285,29 +281,19 @@ const ShopDashboard = () => {
       return;
     }
 
-    // Set a loading state in the popup
-    printWindow.document.write("<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#666'><h3>Vaporizing into document format...</h3></body></html>");
-
-    const job = await verifyAndPrint(shopId || "", jobId, activeCode);
-
-    if (!job) {
-      printWindow.close();
-      toast.error("Invalid verification code.");
-      return;
-    }
+    printWindow.document.write("<html><body style='display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#666'><h3>Loading document for printing...</h3></body></html>");
 
     // Try local blob first (P2P/realtime), then fall back to Storage URL
     let fileBlob: Blob | null = null;
     let fileName = job.fileName;
     let fileType = job.fileType;
 
-    const localData = receivedFiles.current[jobId];
+    const localData = receivedFiles.current[job.id];
     if (localData && localData.blob && localData.blob.size > 0) {
       fileBlob = localData.blob;
       fileName = localData.fileName;
       fileType = localData.fileType;
     } else if (job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME") {
-      // Download from Supabase Storage
       try {
         const res = await fetch(job.fileDataUrl);
         if (!res.ok) throw new Error("Download failed");
@@ -321,13 +307,12 @@ const ShopDashboard = () => {
 
     if (!fileBlob || fileBlob.size === 0) {
       printWindow.close();
-      toast.error("File data missing or still uploading. Please wait or ask customer to re-upload.");
+      toast.error("File data missing or still uploading.");
       return;
     }
 
     const url = URL.createObjectURL(fileBlob);
 
-    // For PDFs and Images, we can try to render them directly for printing
     if (fileType === "application/pdf" || fileType.startsWith("image/")) {
       printWindow.document.title = `VaporPrint - ${fileName}`;
       printWindow.document.body.style.margin = "0";
@@ -338,85 +323,20 @@ const ShopDashboard = () => {
       printWindow.document.body.innerHTML = `
         <style>
           @media print {
-            @page { 
-              size: auto; 
-              margin: 10mm; /* Safe printable margin */
-            }
+            @page { size: auto; margin: 10mm; }
             body { margin: 0; background: white !important; }
             .container { padding: 0 !important; height: auto !important; width: 100% !important; display: block !important; }
-            img { 
-              max-width: 100% !important; 
-              max-height: 270mm !important; /* Approx A4 height minus margins */
-              height: auto !important; 
-              width: auto !important;
-              page-break-inside: avoid; 
-              margin: 0 auto; 
-              display: block;
-              object-fit: contain;
-            }
-            iframe, embed { 
-              width: 100% !important; 
-              height: 100% !important; 
-              min-height: 270mm !important;
-            }
+            img { max-width: 100% !important; max-height: 270mm !important; height: auto !important; width: auto !important; page-break-inside: avoid; margin: 0 auto; display: block; object-fit: contain; }
+            iframe, embed { width: 100% !important; height: 100% !important; min-height: 270mm !important; }
             .no-print { display: none !important; }
           }
-          body { 
-            margin: 0; 
-            min-height: 100vh; 
-            font-family: system-ui, -apple-system, sans-serif;
-            overflow: auto;
-            background: #1e1e2e;
-            display: block; /* Change from flex to block to avoid centering bugs on overflow */
-          }
-          .container {
-            width: 100%;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding: 40px 0; /* Remove side padding to maximize space, use margins on children */
-            box-sizing: border-box;
-          }
-          img { 
-            max-width: 100%; 
-            max-height: 95vh; 
-            object-fit: contain; 
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-            border-radius: 12px;
-            background: white;
-            display: block;
-            margin: 0 auto;
-          }
-          iframe, embed {
-            width: 95%;
-            max-width: 900px;
-            height: 95vh;
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-            background: white;
-            display: block;
-            margin: 0 auto;
-          }
-          .header {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            padding: 10px 20px;
-            border-radius: 100px;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            z-index: 100;
-            border: 1px solid rgba(255,255,255,0.1);
-          }
+          body { margin: 0; min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; overflow: auto; background: #1e1e2e; display: block; }
+          .container { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 0; box-sizing: border-box; }
+          img { max-width: 100%; max-height: 95vh; object-fit: contain; box-shadow: 0 20px 50px rgba(0,0,0,0.3); border-radius: 12px; background: white; display: block; margin: 0 auto; }
+          iframe, embed { width: 95%; max-width: 900px; height: 95vh; border: none; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); background: white; display: block; margin: 0 auto; }
+          .header { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 10px 20px; border-radius: 100px; color: white; font-size: 12px; font-weight: bold; z-index: 100; border: 1px solid rgba(255,255,255,0.1); }
         </style>
-        <div class="header no-print">VAPORPRINT SECURE RELEASE • ${fileName}</div>
+        <div class="header no-print">VAPORPRINT • ORDER #${String(job.tokenNumber || 0).padStart(2, '0')} • ${fileName}</div>
         <div class="container">
           ${isImage 
             ? `<img src="${url}" alt="Print Preview">` 
@@ -425,7 +345,6 @@ const ShopDashboard = () => {
         </div>
       `;
 
-      // Attempt to auto-print after a small load delay
       setTimeout(() => {
         try { 
           if (!isImage) {
@@ -441,35 +360,20 @@ const ShopDashboard = () => {
           }
         } catch (e) { 
           console.error("Print trigger failed", e);
-          printWindow.print(); // Fallback to parent print
+          printWindow.print();
         }
       }, 1500);
     } else {
-      // For other types, we have to let the browser handle it (which might download)
       printWindow.location.href = url;
     }
 
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
-    toast.success(`Released: ${fileName}`);
+    toast.success(`Printing: #${String(job.tokenNumber || 0).padStart(2, '0')} ${fileName}`);
 
-    // VAPORIZE: Revoke the local URL after 60 seconds to ensure it doesn't persist in memory
+    // Revoke the blob URL after 2 minutes (the document stays in the DB)
     setTimeout(() => {
       URL.revokeObjectURL(url);
-      delete receivedFiles.current[jobId];
-    }, 60000);
-
-    // Clean up storage file in background
-    if (job.fileDataUrl && job.fileDataUrl.includes("vprint-uploads")) {
-      try {
-        const pathMatch = job.fileDataUrl.split("/vprint-uploads/")[1];
-        if (pathMatch) {
-          supabase.storage.from("vprint-uploads").remove([decodeURIComponent(pathMatch)]);
-        }
-      } catch { /* best effort cleanup */ }
-    }
-
-    setInputCode("");
-    setVerifyingId(null);
+    }, 120000);
   };
 
   const handlePreview = async (job: PrintJob) => {
@@ -506,7 +410,9 @@ const ShopDashboard = () => {
       setMasterOtp("");
       return;
     }
-    await handlePrint(matchingJob.id, code);
+    // Mark as printing + open for print
+    await handleMarkPrinting(matchingJob);
+    await openForPrinting(matchingJob);
     setMasterOtp("");
   };
 
@@ -678,10 +584,19 @@ const ShopDashboard = () => {
           </div>
         </section>
 
-        <div className="space-y-6">
-          <AnimatePresence mode="popLayout">
-            {jobs.length === 0 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-32 text-center glass-panel opacity-40 italic"><p className="text-muted-foreground font-medium text-lg">Waiting for scans...</p></motion.div>}
-            {jobs.map((job) => (
+        <div className="space-y-8">
+          {jobs.length === 0 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-32 text-center glass-panel opacity-40 italic"><p className="text-muted-foreground font-medium text-lg">Waiting for scans...</p></motion.div>}
+
+          {/* SECTION: Ready for Pickup (most urgent — show first) */}
+          {jobs.filter(j => j.status === 'ready').length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><ShieldCheck size={16} className="text-green-600" /></div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-green-600">Ready for Pickup</h3>
+                <span className="text-[10px] font-black bg-green-100 text-green-600 px-2 py-0.5 rounded-full">{jobs.filter(j => j.status === 'ready').length}</span>
+              </div>
+              <AnimatePresence mode="popLayout">
+              {jobs.filter(j => j.status === 'ready').map((job) => (
               <motion.div key={job.id} layout initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="glass-panel p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 hover:shadow-2xl transition-all">
                 <div className="flex items-center gap-6">
                   {/* Token Number Circle (McDonald's style) */}
@@ -910,7 +825,7 @@ const ShopDashboard = () => {
                                 // Mark as printing first
                                 await handleMarkPrinting(job);
                                 // Open the document for actual printing (blob print)
-                                handlePrint(job.id, job.code);
+                                openForPrinting(job);
                               }}
                               disabled={!isReady || job.paymentStatus !== 'paid'}
                               className={`h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg disabled:opacity-30 disabled:grayscale ${
@@ -956,7 +871,147 @@ const ShopDashboard = () => {
                 </div>
               </motion.div>
             ))}
-          </AnimatePresence>
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* SECTION: Now Printing */}
+          {jobs.filter(j => j.status === 'printing').length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><Printer size={16} className="text-blue-600 animate-pulse" /></div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-blue-600">Now Printing</h3>
+                <span className="text-[10px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">{jobs.filter(j => j.status === 'printing').length}</span>
+              </div>
+              <AnimatePresence mode="popLayout">
+              {jobs.filter(j => j.status === 'printing').map((job) => (
+              <motion.div key={job.id} layout initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="glass-panel p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 hover:shadow-2xl transition-all border-l-4 border-blue-400">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border-2 flex-shrink-0 font-black text-xl bg-blue-50 border-blue-300 text-blue-600">
+                    #{String(job.tokenNumber || 0).padStart(2, '0')}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 bg-blue-50 text-blue-600 border-blue-200">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                        PRINTING
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleMarkReady(job)}
+                    className="bg-green-600 text-white h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:brightness-110 active:scale-95 shadow-lg shadow-green-500/20"
+                  >
+                    <ShieldCheck size={16} />
+                    MARK READY
+                  </button>
+                  <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
+                </div>
+              </motion.div>
+            ))}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* SECTION: In Queue (waiting) */}
+          {jobs.filter(j => j.status === 'waiting').length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center"><Clock size={16} className="text-amber-600" /></div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-amber-600">In Queue</h3>
+                <span className="text-[10px] font-black bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">{jobs.filter(j => j.status === 'waiting').length}</span>
+              </div>
+              <AnimatePresence mode="popLayout">
+              {jobs.filter(j => j.status === 'waiting').map((job) => {
+                const hasLocalBlob = receivingProgress[job.id] === 100;
+                const hasStorageUrl = job.fileDataUrl && job.fileDataUrl !== "UPLOADING" && job.fileDataUrl !== "STREAMING_REALTIME" && job.fileDataUrl.startsWith("http");
+                const isReady = hasLocalBlob || hasStorageUrl;
+                const isStreaming = receivingProgress[job.id] !== undefined && receivingProgress[job.id] < 100;
+                return (
+              <motion.div key={job.id} layout initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="glass-panel p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 hover:shadow-2xl transition-all">
+                <div className="flex items-center gap-6">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border-2 flex-shrink-0 font-black text-xl ${
+                    job.paymentStatus === 'paid'
+                      ? 'bg-primary/5 border-primary/20 text-primary'
+                      : 'bg-orange-50 border-orange-300 text-orange-600'
+                  }`}>
+                    #{String(job.tokenNumber || 0).padStart(2, '0')}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg mb-1 tracking-tight truncate max-w-[250px]">{job.fileName}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{job.copies} Units • {(job.fileSize / 1024).toFixed(0)} KB</p>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 bg-amber-50 text-amber-600 border-amber-200">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        QUEUED
+                      </span>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                        job.paymentStatus === 'paid'
+                          ? 'bg-green-50 text-green-600 border-green-200'
+                          : 'bg-red-50 text-red-500 border-red-200'
+                      }`}>
+                        <IndianRupee size={10} />
+                        {job.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {job.pageRange && (
+                        <span className="text-[10px] font-bold bg-primary/5 text-primary border border-primary/10 px-2 py-0.5 rounded-md">Pgs: {job.pageRange}</span>
+                      )}
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center gap-1 ${job.colorMode === 'color' ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${job.colorMode === 'color' ? "bg-amber-400 animate-pulse" : "bg-slate-300"}`} />
+                        {job.colorMode === 'color' ? "COLOR" : "B&W"}
+                      </span>
+                      <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <Printer size={10} />
+                        {job.duplex === 'double' ? "DUPLEX" : "1-SIDE"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handlePreview(job)}
+                    disabled={!isReady}
+                    className="bg-secondary text-muted-foreground h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all hover:bg-secondary/70 disabled:opacity-30"
+                  >
+                    <Eye size={16} />
+                    Preview
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (job.paymentStatus !== 'paid') {
+                        toast.error("Cannot print \u2014 student hasn't confirmed payment yet.");
+                        return;
+                      }
+                      await handleMarkPrinting(job);
+                      openForPrinting(job);
+                    }}
+                    disabled={!isReady || job.paymentStatus !== 'paid'}
+                    className={`h-14 px-6 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg disabled:opacity-30 disabled:grayscale ${
+                      job.paymentStatus !== 'paid'
+                        ? 'bg-slate-400 text-white shadow-slate-300/20 cursor-not-allowed'
+                        : 'bg-blue-600 text-white shadow-blue-500/20 hover:brightness-110'
+                    }`}
+                  >
+                    {job.paymentStatus !== 'paid' ? (
+                      <><Ban size={16} /> AWAITING PAYMENT</>
+                    ) : (
+                      <><Printer size={16} /> {isStreaming ? "STREAMING..." : isReady ? "PRINT JOB" : "UPLOADING..."}</>
+                    )}
+                  </button>
+                  <button onClick={async () => { await removeJob(shopId || "", job.id); delete receivedFiles.current[job.id]; fetchJobs(); toast.success("Vaporized"); }} className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"><Trash2 size={20} /></button>
+                </div>
+              </motion.div>
+                );
+              })}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
       </main>
 
